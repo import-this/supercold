@@ -1,0 +1,23 @@
+CACHE MANIFEST
+# Update the next line after a change is made.
+# 2016-09-26:v1.0.0
+
+# Do NOT use backslashes before relative paths.
+
+# HTML
+index.html
+about.html
+terms.html
+privacy.html
+
+# CSS
+# Nothing to do here.
+
+# JavaScript
+js/dataview-polyfill.js
+js/phaser-supercold.min.js
+js/supercold.js
+
+# Resources that require the user to be online (everything not listed above).
+NETWORK:
+*

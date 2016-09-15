@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html manifest="cache.appcache">
+    <head>
+        <meta charset="UTF-8">
+
+        <meta name="author" content="import-this">
+        <meta name="application-name" content="SUPERCOLD">
+        <meta name="description" content="A simple and crude 2D HTML5 game
+            with the clever mechanics of SUPERHOT - #SUPERCOLD">
+        <meta name="keywords" content="SUPERCOLD, SUPERHOT, clone, game, 2D,
+            HTML5, Phaser, import-this, github, github.io, open source">
+        <meta name="robots" content="index, follow">
+
+        <!-- Mobile devices magic. -->
+        <meta name="viewport" content="width=device-width, height=device-height, minimal-ui,
+            initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
+
+        <!-- Open Graph for Facebook. -->
+        <meta property="og:url" content="https://import-this.github.io/supercold/" />
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content="SUPERCOLD" />
+        <meta property="og:site_name" content="SUPERCOLD" />
+        <meta property="og:image" content="https://import-this.github.io/supercold/img/wallpaper.png" />
+        <meta property="og:description" content="A simple and crude 2D HTML5 game
+            with the clever mechanics of SUPERHOT - #SUPERCOLD" />
+
+        <!-- Google Search Console verification method. -->
+        <meta name="google-site-verification" content="l3FLvijRzmzAxnDb7k-KtuYtiKbbELUQLsvJUs1YOs0" />
+
+        <title>SUPERCOLD</title>
+
+        <style type="text/css">
+            * {
+                margin: 0;
+                padding: 0;
+            }
+            html, body, #supercold-canvas {
+                width: 100%;
+                height: 100%;
+                overflow: hidden;               /* no scrollbar */
+            }
+            body {
+                font-family: Helvetica, Arial;
+                color: rgb(230, 251, 255);
+                text-shadow: 0px -1px 8px rgba(230, 251, 255, 1),
+                             0px  1px 8px rgba(230, 251, 255, 1),
+                            -1px  0px 4px rgba(245, 4, 3, 0.275),
+                             1px  0px 4px rgba(220, 250, 255, 1);
+                background-color: rgb(10, 10, 10);
+            }
+            a {
+                color: rgb(235, 251, 255);
+                text-decoration: none;
+            }
+            button {
+                margin: 4px 0px;
+                padding: 3px 40px;
+
+                font-size: 1.15em;
+                color: rgb(235, 251, 255);
+                text-shadow: -1px 0px 4px rgb(230, 251, 255),
+                              1px 0px 4px rgb(230, 251, 255);
+
+                background-color: rgb(34, 34, 34);
+                background: -webkit-linear-gradient(top, rgb(70, 70, 70), rgb(34, 34, 34));
+                background:    -moz-linear-gradient(top, rgb(70, 70, 70), rgb(34, 34, 34));
+                background:     -ms-linear-gradient(top, rgb(70, 70, 70), rgb(34, 34, 34));
+                background:      -o-linear-gradient(top, rgb(70, 70, 70), rgb(34, 34, 34));
+                background:   linear-gradient(to bottom, rgb(70, 70, 70), rgb(34, 34, 34));
+
+                border: 2px solid rgb(34, 34, 34);
+                border-radius: 6px;
+
+                -webkit-box-shadow: 0px 0px 5px 1px rgb(70, 70, 70);
+                        box-shadow: 0px 0px 5px 1px rgb(70, 70, 70);
+
+                -webkit-transition-duration: 0.2s;
+                   -moz-transition-duration: 0.2s;
+                     -o-transition-duration: 0.2s;
+                        transition-duration: 0.2s;
+            }
+            button:hover {
+                color: rgb(34, 34, 34);
+                text-shadow: -1px 0px 2px rgb(34, 34, 34),
+                              1px 0px 2px rgb(34, 34, 34);
+
+                background-color: rgb(245, 4, 3);
+                background: -webkit-linear-gradient(top, rgb(245, 30, 30), rgb(245, 4, 3));
+                background:    -moz-linear-gradient(top, rgb(245, 30, 30), rgb(245, 4, 3));
+                background:     -ms-linear-gradient(top, rgb(245, 30, 30), rgb(245, 4, 3));
+                background:      -o-linear-gradient(top, rgb(245, 30, 30), rgb(245, 4, 3));
+                background:   linear-gradient(to bottom, rgb(245, 30, 30), rgb(245, 4, 3));
+
+                border: 2px solid #f44336;
+
+                -webkit-box-shadow: 0px 0px 5px 1px rgb(245, 4, 3);
+                        box-shadow: 0px 0px 5px 1px rgb(245, 4, 3);
+            }
+            #supercold {
+                font-size: 1.75em;
+                font-weight: lighter;
+
+                color: rgb(235, 251, 255);
+                text-shadow: 0px -1px 6px rgba(220, 251, 255, 1),
+                             0px  1px 6px rgba(220, 251, 255, 1),
+                            -1px  0px 4px rgba(245, 4, 3, 0.225),
+                             1px  0px 4px rgba(220, 250, 255, 1);
+            }
+            #supercold span {
+                text-shadow: 0px  0px 6px rgba(220, 251, 255, 1),
+                             0px -1px 6px rgba(220, 251, 255, 1),
+                             0px  1px 6px rgba(220, 251, 255, 1),
+                            -1px  0px 4px rgba(245, 4, 3, 0.725),
+                             1px  0px 4px rgba(220, 251, 255, 1);
+            }
+            #superhot {
+                font-size: 1.4em;
+                vertical-align: middle;
+
+                border-bottom: 1px dotted rgba(245, 4, 3, 0.4);
+
+                color: rgb(245, 4, 3);
+                text-shadow: -1px 1px 6px rgb(245, 4, 3),
+                             1px -1px 6px rgb(245, 4, 3);
+            }
+            #superhot span {
+                text-shadow: 0px 0px 4px rgb(245, 4, 3),
+                            -1px 1px 4px rgb(245, 4, 3),
+                            1px -1px 4px rgb(245, 4, 3);
+            }
+            #supercold, #superhot {
+                font-weight: normal;
+            }
+            #supercold span, #superhot span {
+                font-weight: bold;
+            }
+            #instructions .superhotkey {
+                color: rgb(245, 4, 3);
+                text-shadow: 0px  0px 3px rgb(245, 4, 3),
+                            -1px  1px 5px rgb(245, 4, 3),
+                             1px -1px 5px rgb(245, 4, 3);
+            }
+            #center div {
+                margin: 4px 0px;
+            }
+            #center {
+                position: fixed;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+
+                text-align: center;
+                /* Set a min-width for mobile devices. */
+                min-width: 280px;
+                padding: 16px 34px 10px;
+
+                background-color: rgba(40, 40, 40, 0.925);
+                background: -webkit-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+                background:    -moz-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+                background:     -ms-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+                background:      -o-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+                background:         radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+
+                border-radius: 8px;
+
+                -webkit-box-shadow: 0px 0px 6px 1px rgb(24, 24, 24);
+                        box-shadow: 0px 0px 6px 1px rgb(24, 24, 24);
+            }
+            #more {
+                position: fixed;
+                top: 0;
+                left: 0;
+                padding: 4px 8px;
+
+                background-color: rgba(40, 40, 40, 0.75);
+                border-bottom-right-radius: 6px;
+
+                -webkit-box-shadow: 0px 0px 6px 1px rgb(128, 128, 128);
+                        box-shadow: 0px 0px 6px 1px rgb(128, 128, 128);
+            }
+            #bottom {
+                position: fixed;
+                bottom: 0;
+                right: 0;
+                padding: 4px 8px;
+
+                font-size: 0.96em;
+                background-color: rgba(40, 40, 40, 0.75);
+                border-top-left-radius: 6px;
+
+                -webkit-box-shadow: 0px 0px 5px 1px rgb(128, 128, 128);
+                        box-shadow: 0px 0px 5px 1px rgb(128, 128, 128);
+            }
+            #top {
+                position: fixed;
+                top: 4px;
+                right: 4px;
+            }
+            #top > div {
+                vertical-align: top;
+                /* Override default FB display style for mobile. */
+                display: inline-block;
+            }
+            #top > iframe {
+                /* Use this instead of frameborder=0. */
+                border: none;
+            }
+        </style>
+
+        <!-- ArrayBuffer and DataView support for IE9, required by P2 Physics. -->
+        <script type="text/javascript" src="js/dataview-polyfill.js"></script>
+        <script type="text/javascript" src="js/phaser-supercold.min.js"></script>
+        <script type="text/javascript" src="js/supercold.js"></script>
+
+        <!-- Google Analytics -->
+        <script>
+            (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+            (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+            m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+            })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+            ga('create', 'UA-84136108-1', 'auto');
+            ga('send', 'pageview');
+        </script>
+    </head>
+    <body>
+        <!-- Facebook JavaScript SDK -->
+        <div id="fb-root"></div>
+        <script>
+            (function(d, s, id) {
+                var js, fjs = d.getElementsByTagName(s)[0];
+                if (d.getElementById(id)) return;
+                js = d.createElement(s); js.id = id;
+                js.src = "//connect.facebook.net/en_US/sdk.js#xfbml=1&version=v2.7";
+                fjs.parentNode.insertBefore(js, fjs);
+            }(document, 'script', 'facebook-jssdk'));
+        </script>
+
+        <div id="supercold-canvas">
+            <!-- Phaser will insert the canvas here. -->
+        </div>
+        <div id="menu">
+            <div id="more">
+                <a href="https://import-this.github.io/">More games</a>
+            </div>
+            <div id="top">
+                <!-- Facebook Like and Share Buttons -->
+                <div class="fb-like" data-href="https://www.facebook.com/supercoldgame/" data-layout="button" data-action="like" data-size="small" data-show-faces="false" data-share="true"></div>
+                <!-- GitHub Star Button (https://ghbtns.com/ with modifications) -->
+                <iframe src="https://ghbtns.com/github-btn.html?user=import-this&repo=supercold&type=star" scrolling="0" width="50" height="20"></iframe>
+            </div>
+            <div id="center">
+                <h2 id="supercold">SUPER<span>COLD</span></h2>
+                <div id="description">
+                    A simple 2D game with the clever mechanics of<br />
+                    <strong>
+                        <a id="superhot" href="http://superhotgame.com/">SUPER<span>HOT</span></a>
+                    </strong>
+                </div>
+                <div id="instructions">
+                    <strong class="superhotkey">WASD</strong> to move.
+                    <strong class="superhotkey">Left Click</strong> to fire.<br />
+                    <strong>ESC</strong> to quit.
+                    <strong>Backspace</strong> to restart.
+                </div>
+                <div>
+                    <button id="start" name="start" type="button">Start</button>
+                </div>
+            </div>
+            <div id="bottom">
+                <a href="about.html" title="About the game">About</a> |
+                <a href="terms.html" title="About usage rules">Terms of Use</a> |
+                <a href="privacy.html" title="About collected info">Privacy Policy</a>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            (function(document) {
+                function hideMenu() {
+                    document.getElementById('menu').style.display = 'none';
+                }
+                function showMenu() {
+                    document.getElementById('menu').style.display = 'block';
+                }
+
+                // Let the game begin!
+                var game = Supercold.play('supercold-canvas', {
+                    onMainMenuOpen: showMenu
+                });
+
+                document.getElementById('start').addEventListener('click', function(event) {
+                    hideMenu();
+                    game.state.start('Intro');
+                }, false);
+            }(document));
+        </script>
+
+        <!-- Adblock detection -->
+        <script type="text/javascript" src="js/ads.js"></script>
+        <script type="text/javascript">
+            (function() {
+                if (!window.noAdblock) {
+                    // Adblock detected!
+
+                } else {
+
+                }
+            }());
+        </script>
+    </body>
+</html>
