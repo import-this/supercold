@@ -2047,7 +2047,8 @@ Supercold.Game.prototype.render = function() {
 
 Supercold.play = function play(parent, config) {
     // Tell Phaser to cover the entire window and use the best renderer.
-    var game = new Phaser.Game('100', '100', Phaser.AUTO, parent);
+    // NOTE: Something is wrong with WebGL, so we will use canvas for now!
+    var game = new Phaser.Game('100', '100', Phaser.CANVAS, parent);
 
     /**
      * The single instance of data storage for our game.
