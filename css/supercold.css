@@ -1,0 +1,316 @@
+* {
+    margin: 0;
+    padding: 0;
+}
+
+/* https://www.paulirish.com/2012/box-sizing-border-box-ftw/ */
+html {
+    -webkit-box-sizing: border-box;
+       -moz-box-sizing: border-box;
+            box-sizing: border-box;
+}
+*, *:before, *:after {
+    -webkit-box-sizing: inherit;
+       -moz-box-sizing: inherit;
+            box-sizing: inherit;
+}
+
+/* Fancy checkboxes */
+/* http://stackoverflow.com/questions/4148499/how-to-style-checkbox-using-css */
+input[type='checkbox'] {
+    display: none;
+}
+input[type='checkbox'] + label {
+    position: relative;
+    cursor: pointer;
+}
+input[type='checkbox'] + label > span {
+    -webkit-box-sizing: content-box;
+       -moz-box-sizing: content-box;
+            box-sizing: content-box;
+
+    display: inline-block;
+    /* The text is not aligned exactly with the checkbox. */
+    vertical-align: -2px;
+    width: 16px;
+    height: 16px;
+    margin-right: 4px;
+    color: rgb(245, 4, 3);
+    text-shadow: -1px 1px 6px rgb(245, 4, 3),
+                 1px -1px 6px rgb(245, 4, 3);
+    background-color: #525252;
+    text-align: center;
+    cursor: pointer;
+
+    border: 4px solid #3a3a3a;
+    border-radius: 3px;
+}
+input[type='checkbox'] + label > span::before {
+    content: '\2714';       /* Tick sign. */
+    opacity: 0;
+    /* The tick sign is not placed exactly in the center. */
+    position: relative;
+    top: -3px;
+}
+input[type='checkbox'] + label:hover > span::before {
+    opacity: 0.6;
+}
+input[type='checkbox']:checked + label > span::before {
+    opacity: 1;
+}
+
+/* http://stackoverflow.com/a/4407335/1751037 */
+.no-select {
+    -webkit-touch-callout: none;    /* iOS Safari */
+      -webkit-user-select: none;    /* Chrome/Safari/Opera */
+       -khtml-user-select: none;    /* Konqueror */
+         -moz-user-select: none;    /* Firefox */
+          -ms-user-select: none;    /* Internet Explorer/Edge */
+              user-select: none;
+    cursor: default;
+}
+.no-touch-action {
+    -ms-touch-action: none;
+        touch-action: none;
+}
+
+html, body, #supercold-canvas {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;               /* no scrollbar */
+}
+body {
+    font-family: Helvetica, Arial;
+    color: rgb(230, 251, 255);
+    text-shadow: 0px -1px 8px rgba(230, 251, 255, 1),
+                 0px  1px 8px rgba(230, 251, 255, 1),
+                -1px  0px 4px rgba(245, 4, 3, 0.275),
+                 1px  0px 4px rgba(220, 250, 255, 1);
+    background-color: rgb(10, 10, 10);
+}
+a {
+    color: rgb(235, 251, 255);
+    text-decoration: none;
+}
+button {
+    margin: 4px 0;
+    padding: 3px 40px;
+
+    font-size: 1.15em;
+    color: rgb(235, 251, 255);
+    text-shadow: -1px 0 4px rgb(230, 251, 255),
+                  1px 0 4px rgb(230, 251, 255);
+
+    background-color: rgb(34, 34, 34);
+    background: -webkit-linear-gradient(top, rgb(70, 70, 70), rgb(34, 34, 34));
+    background:    -moz-linear-gradient(top, rgb(70, 70, 70), rgb(34, 34, 34));
+    background:     -ms-linear-gradient(top, rgb(70, 70, 70), rgb(34, 34, 34));
+    background:      -o-linear-gradient(top, rgb(70, 70, 70), rgb(34, 34, 34));
+    background:   linear-gradient(to bottom, rgb(70, 70, 70), rgb(34, 34, 34));
+
+    border: 2px solid rgb(34, 34, 34);
+    border-radius: 6px;
+
+    -webkit-box-shadow: 0 0 5px 1px rgb(70, 70, 70);
+            box-shadow: 0 0 5px 1px rgb(70, 70, 70);
+
+    -webkit-transition-duration: 0.2s;
+       -moz-transition-duration: 0.2s;
+         -o-transition-duration: 0.2s;
+            transition-duration: 0.2s;
+}
+button:hover {
+    color: rgb(34, 34, 34);
+    text-shadow: -1px 0 2px rgb(34, 34, 34),
+                  1px 0 2px rgb(34, 34, 34);
+
+    background-color: rgb(245, 4, 3);
+    background: -webkit-linear-gradient(top, rgb(245, 30, 30), rgb(245, 4, 3));
+    background:    -moz-linear-gradient(top, rgb(245, 30, 30), rgb(245, 4, 3));
+    background:     -ms-linear-gradient(top, rgb(245, 30, 30), rgb(245, 4, 3));
+    background:      -o-linear-gradient(top, rgb(245, 30, 30), rgb(245, 4, 3));
+    background:   linear-gradient(to bottom, rgb(245, 30, 30), rgb(245, 4, 3));
+
+    border: 2px solid #f44336;
+
+    -webkit-box-shadow: 0 0 5px 1px rgb(245, 4, 3);
+            box-shadow: 0 0 5px 1px rgb(245, 4, 3);
+}
+
+#supercold {
+    font-size: 1.75em;
+    font-weight: lighter;
+
+    color: rgb(235, 251, 255);
+    text-shadow: 0px -1px 6px rgba(220, 251, 255, 1),
+                 0px  1px 6px rgba(220, 251, 255, 1),
+                -1px  0px 4px rgba(245, 4, 3, 0.225),
+                 1px  0px 4px rgba(220, 250, 255, 1);
+}
+#supercold span {
+    text-shadow: 0px  0px 6px rgba(220, 251, 255, 1),
+                 0px -1px 6px rgba(220, 251, 255, 1),
+                 0px  1px 6px rgba(220, 251, 255, 1),
+                -1px  0px 4px rgba(245, 4, 3, 0.725),
+                 1px  0px 4px rgba(220, 251, 255, 1);
+}
+#superhot {
+    cursor: pointer;
+    font-size: 1.4em;
+    border-bottom: 1px dotted rgba(245, 4, 3, 0.5);
+    color: rgb(245, 4, 3);
+    text-shadow: -1px 1px 6px rgb(245, 4, 3),
+                 1px -1px 6px rgb(245, 4, 3);
+}
+#superhot span {
+    text-shadow: 0px 0px 4px rgb(245, 4, 3),
+                -1px 1px 4px rgb(245, 4, 3),
+                1px -1px 4px rgb(245, 4, 3);
+}
+#supercold, #superhot {
+    font-weight: normal;
+}
+#supercold span, #superhot span {
+    font-weight: bold;
+}
+#description strong {
+    display: block;
+}
+#instructions {
+    line-height: 1.25;
+}
+#instructions .superhotkey {
+    color: rgb(245, 4, 3);
+    text-shadow: 0px  0px 3px rgb(245, 4, 3),
+                -1px  1px 5px rgb(245, 4, 3),
+                 1px -1px 5px rgb(245, 4, 3);
+}
+#center {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    -webkit-transform: translate(-50%, -50%);
+       -moz-transform: translate(-50%, -50%);
+        -ms-transform: translate(-50%, -50%);
+         -o-transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%);
+
+    min-width: 704px;
+    text-align: center;
+    padding: 0.75em 1em;
+    border-radius: 8px;
+
+    background-color: rgba(40, 40, 40, 0.925);
+    background: -webkit-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+    background:    -moz-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+    background:     -ms-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+    background:      -o-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+    background:         radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+
+    -webkit-box-shadow: 0 0 6px 1px rgb(24, 24, 24);
+            box-shadow: 0 0 6px 1px rgb(24, 24, 24);
+}
+#panes {
+    display: table;
+    border-spacing: 0.75em;
+}
+.pane {
+    display: table-cell;
+    vertical-align: middle;
+}
+#mutator-pane {
+    font-size: 0.95em;
+}
+.pane div {
+    margin: 4px 0;
+}
+#mutator-pane div {
+    margin: 2px 0;
+}
+#mutators {
+    display: inline-block;
+    text-align: left;
+}
+#start {
+    cursor: pointer;
+    margin-top: 0.4em;
+}
+.locked10, .locked20, .locked30, .locked40, .locked50, .locked75, .locked100 {
+    display: none;
+}
+#more {
+    position: fixed;
+    top: 0;
+    left: 0;
+    padding: 4px 8px;
+
+    background-color: rgba(40, 40, 40, 0.75);
+    border-bottom-right-radius: 6px;
+
+    -webkit-box-shadow: 0 0 6px 1px rgb(128, 128, 128);
+            box-shadow: 0 0 6px 1px rgb(128, 128, 128);
+}
+#bottom {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    padding: 4px 8px;
+
+    font-size: 0.96em;
+    background-color: rgba(40, 40, 40, 0.75);
+    border-top-left-radius: 6px;
+
+    -webkit-box-shadow: 0 0 5px 1px rgb(128, 128, 128);
+            box-shadow: 0 0 5px 1px rgb(128, 128, 128);
+}
+#top {
+    position: fixed;
+    top: 4px;
+    right: 4px;
+}
+#top a {
+    /* Hide text of FB share and Twitter buttons until the plugins have loaded. */
+    color: rgb(10, 10, 10);
+    text-shadow: none;
+}
+#top > div {
+    vertical-align: top;
+    /* Override default FB display style for mobile. */
+    display: inline-block;
+}
+#top > iframe {
+    /* Use this instead of frameborder=0. */
+    border: none;
+}
+
+#tips, #hint {
+    display: none;
+    pointer-events: none;
+    position: fixed;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    font-size: 1.5em;
+    color: rgb(245, 251, 255);
+    text-shadow: 0 -1px 7px rgba(242, 251, 255, 1),
+                 0  1px 7px rgba(242, 251, 255, 1);
+}
+#tips {
+    top: 13%;
+}
+#hint {
+    bottom: 13%;
+}
+@media (min-width: 550px) {
+    #tips, #hint {
+        font-size: 2em;
+    }
+}
+@media (min-width: 768px) {
+    #tips, #hint {
+        font-size: 2.5em;
+    }
+}
+.tip {
+    display: none;
+}

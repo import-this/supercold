@@ -5,7 +5,7 @@
  * A simple and crude 2D HTML5 game with the clever mechanics of SUPERHOT.
  * (You can check out SUPERHOT @ http://superhotgame.com/)
  *
- * Copyright (c) 2016, Vasilis Poulimenos
+ * Copyright (c) 2017, Vasilis Poulimenos
  * Released under the BSD 3-Clause License
  * https://github.com/import-this/supercold/blob/master/LICENSE
  *
@@ -24,8 +24,8 @@
  * Comments follow the conventions of JSDoc. Documentation can be found here:
  *     http://usejsdoc.org/
  *
- * Date: 31/7/2016
- * @version: 1.0.0
+ * Date: 15/2/2017
+ * @version: 1.1.0
  * @author Vasilis Poulimenos
  */
 
@@ -33,6 +33,12 @@
 (function(window, Phaser) {
 
 "use strict";
+
+/**
+ * Don't forget to set this to false in production!
+ * @const
+ */
+var DEBUG = false;
 
 function noop() {}
 
@@ -57,6 +63,40 @@ var log = (function() {
  */
 
 /**
+ * The version number. Useful for marking changes in the storage format.
+ * @const {string}
+ */
+var VERSION = '1.0.0';
+
+/**
+ * Local storage is per origin (per domain and protocol),
+ * so use a prefix to avoid collisions with other games.
+ * @const {string}
+ */
+var PREFIX = 'supercold_';
+
+/**
+ * Storage keys.
+ * @const {object}
+ */
+var Keys = {
+    VERSION: PREFIX + 'version',
+
+    LEVEL: PREFIX + 'level',
+    TIMES: PREFIX + 'times',
+    MUTATORS: PREFIX + 'mutators',
+    RNDSTATE: PREFIX + 'rndstate'
+};
+
+/**
+ * @const {object}
+ */
+var MSGS = {
+    NAN: 'Argument cannot be interpreted as a number',
+    NEG: 'Negative argument'
+};
+
+/**
  * A storage manager for the game.
  * Manages local storage.
  *
@@ -64,55 +104,31 @@ var log = (function() {
  * @constructor
  */
 function GameStorageManager(localStorage) {
-    var levelKey = GameStorageManager._LEVEL_KEY,
-        timesKey = GameStorageManager._TIMES_PLAYED_KEY;
+    this.localStorage = localStorage || window.localStorage;
 
-    this._local = localStorage || window.localStorage;
-    this._local.setItem(levelKey, this._local.getItem(levelKey) || 1);
-    this._local.setItem(timesKey, this._local.getItem(timesKey) || 0);
+    // If the storage uses an old version, erase everything to avoid errors.
+    if (this.load(Keys.VERSION) !== VERSION) {
+        if (DEBUG) log('Clearing storage...');
+        this.clear();
+        this.save(Keys.VERSION, VERSION);
+    }
+
+    this.saveLevel(this.load(Keys.LEVEL) || 1);
+    this.saveTimes(this.load(Keys.TIMES) || 0);
 }
 
 /**
- * Local storage is per origin (per domain and protocol),
- * so use a prefix to avoid collisions with other games.
- * @const {string}
- */
-GameStorageManager.PREFIX = 'supercold_';
-/** @const {string} */
-GameStorageManager._LEVEL_KEY = GameStorageManager.PREFIX + 'level';
-/** @const {string} */
-GameStorageManager._TIMES_PLAYED_KEY = GameStorageManager.PREFIX + 'timesPlayed';
-/** @const {string} */
-GameStorageManager._RND_STATE_KEY = GameStorageManager.PREFIX + 'rndState';
-
-/** @const {string} */
-GameStorageManager._LEVEL_TYPE_MSG = 'Level cannot be interpreted as a number';
-/** @const {string} */
-GameStorageManager._NEG_LEVEL_MSG = 'Negative level';
-
-/**
  * Clears the local storage.
- * @return {GameStorageManager} this
- */
-GameStorageManager.prototype._clearLocal = function() {
-    this._local.clear();
-    return this;
-};
-
-/**
- * Clears the storage.
- * @return {GameStorageManager} this
  */
 GameStorageManager.prototype.clear = function() {
-    return this._clearLocal();
+    this.localStorage.clear();
 };
 
-/**
- * Returns the last level that the player played.
- * @return {number} The last level.
- */
-GameStorageManager.prototype.getLevel = function() {
-    return Number(this._local.getItem(GameStorageManager._LEVEL_KEY));
+GameStorageManager.prototype.save = function(key, value) {
+    this.localStorage.setItem(key, value);
+};
+GameStorageManager.prototype.load = function(key) {
+    return this.localStorage.getItem(key);
 };
 
 /**
@@ -122,89 +138,90 @@ GameStorageManager.prototype.getLevel = function() {
  * @throws {TypeError} if the parameter cannot be interpreted as a number.
  * @throws {RangeError} if the new level is negative.
  */
-GameStorageManager.prototype.setLevel = function(level) {
+GameStorageManager.prototype.saveLevel = function(level) {
     level = Number(level);
     if (isNaN(level)) {
-        throw new TypeError(GameStorageManager._LEVEL_TYPE_MSG);
+        throw new TypeError(MSGS.NAN);
     }
     if (level < 0) {
-        throw new RangeError(GameStorageManager._NEG_LEVEL_MSG);
+        throw new RangeError(MSGS.NEG);
     }
-    this._local.setItem(GameStorageManager._LEVEL_KEY, level);
+    this.save(Keys.LEVEL, level);
+};
+/**
+ * Returns the last level that the player played.
+ * @return {number} The level.
+ */
+GameStorageManager.prototype.loadLevel = function() {
+    return Number(this.load(Keys.LEVEL));
 };
 
-/**
- * Erases the last level.
- */
-GameStorageManager.prototype.resetLevel = function() {
-    this._local.setItem(GameStorageManager._LEVEL_KEY, 0);
+GameStorageManager.prototype.saveTimes = function(times) {
+    this.save(Keys.TIMES, times);
+};
+GameStorageManager.prototype.loadTimes = function() {
+    return Number(this.load(Keys.TIMES));
 };
 
-/**
- *
- * @return {object}
- */
-GameStorageManager.prototype.getRndState = function() {
-    return this._local.getItem(GameStorageManager._RND_STATE_KEY);
+GameStorageManager.prototype.saveMutators = function(mutators) {
+    this.save(Keys.MUTATORS, JSON.stringify(mutators));
+};
+GameStorageManager.prototype.loadMutators = function() {
+    return JSON.parse(this.load(Keys.MUTATORS));
 };
 
-/**
- *
- */
-GameStorageManager.prototype.setRndState = function(state) {
-    this._local.setItem(GameStorageManager._RND_STATE_KEY, state);
+GameStorageManager.prototype.saveRndState = function(state) {
+    this.save(Keys.RNDSTATE, state);
+};
+GameStorageManager.prototype.loadRndState = function() {
+    return this.load(Keys.RNDSTATE);
 };
 
 /********************************* Supercold **********************************/
 
 /**
- * Don't forget to set this to false in production!
- * @const
- */
-var DEBUG = !true;
-
-/**
- * Some module global settings for our Phaser game.
+ * Some module-level global settings for our Phaser game.
  * @const
  */
 var CLEAR_WORLD = true,
     CLEAR_CACHE = false,
     /**
-     * Arcade physics support AABB (but not BB) vs Circle collision detection
-     * since version 2.6.0 (released 8/7/2016), but there seems to be a bug as
-     * of version 2.6.1 that causes such collision detection to fail at times.
-     * So let's use the more expensive but powerful P2 physics system.
-     *
+     * Use the more expensive but powerful P2 physics system. The others don't cut it.
      * Note: When a game object is given a P2 body, it has its anchor set to 0.5.
      */
     PHYSICS_SYSTEM = Phaser.Physics.P2JS,
 
     /**
-     * Cache keys.
+     * Constants for the Phaser.Cache.
      */
-    CACHE_KEY_PLAYER = 'player',
-    CACHE_KEY_BOT = 'bot',
-    CACHE_KEY_BULLET = 'bullet',
-    CACHE_KEY_TRAIL = 'trail',
-    CACHE_KEY_BG = 'background',
-    CACHE_KEY_FLASH = 'flash',
-    CACHE_KEY_OVERLAY_DARK = 'overlay_dark',
-    CACHE_KEY_OVERLAY_LIGHT = 'overlay_light',
+    CACHE = {
+        /**
+         * Identifiers for assets in the Phaser.Cache.
+         */
+        KEY: {
+            PLAYER: 'player',
+            BOT: 'bot',
+            BULLET: 'bullet',
+            TRAIL: 'trail',
+            BG: 'background',
+            FLASH: 'flash',
+            OVERLAY_DARK: 'overlay_dark',
+            OVERLAY_LIGHT: 'overlay_light'
+        }
+    },
 
     DEBUG_POSX = 32;
 
 /*
  * Note: All dimensions/lengths/distances are measured in pixels.
- *       It's best to keep all values round.
+ *       It's probably best to keep all these values round.
  */
 
 /**
- *
  * The screen ratio for most devices is 16/9,
- * so we pick a corresponding resolution.
+ * so let's pick a corresponding resolution.
  * http://www.w3schools.com/browsers/browsers_display.asp
  * https://www.w3counter.com/globalstats.php
- *
  * @const
  */
 var NATIVE_WIDTH = 1366,
@@ -215,13 +232,13 @@ var NATIVE_WIDTH = 1366,
         height: Math.round(NATIVE_HEIGHT / 2)
     },
 
-    FACTOR_SLOW = 10,
-    FACTOR_SLOWER = 50,
-    FACTOR_FROZEN = 200,
+    CELLDIM = 40,
 
-    // Idea: 4 seconds for the player to move from one end to the other.
-    // Even though with P2 this is not actually the end result (check p2.pxm).
-    PLAYER_SPEED = Math.round(NATIVE_WIDTH / 4),
+    FACTOR_SLOW = 10,
+    FACTOR_SLOWER = 40,
+    FACTOR_FROZEN = 192,
+
+    PLAYER_SPEED = 300,
     BOT_SPEED_NORMAL = PLAYER_SPEED,
     BULLET_SPEED_NORMAL = PLAYER_SPEED * 5;
 
@@ -232,11 +249,23 @@ var NATIVE_WIDTH = 1366,
  */
 var Supercold = {
     /**
-     * Supercold world size (in pixels). Let it be a power of 2.
+     * Cell dimensions (square).
+     */
+    cell: {
+        width: CELLDIM,
+        height: CELLDIM
+    },
+    /**
+     * Supercold world size (aspect ratio 4:3).
      */
     world: {
-        width: 2048,
-        height: 2048
+        // Too large, so it takes a bit to load!
+        //width: CELLDIM * 64,      // 2560
+        //height: CELLDIM * 48      // 1920
+        //width: CELLDIM * 60,      // 2400
+        //height: CELLDIM * 42      // 1800
+        width: CELLDIM * 56,        // 2240
+        height: CELLDIM * 42        // 1680
     },
 
     /**
@@ -247,8 +276,8 @@ var Supercold = {
      * recommended to use Sprite sizes that are even on both axis.
      */
     player: {
-        radius: 30,
-        sideLen: 20
+        radius: 25,
+        sideLen: 16
     },
     bullet: {
         width: 16,
@@ -256,25 +285,40 @@ var Supercold = {
         bodyLen: 8,
         tipRadius: 4
     },
+    minimap: {
+        width: 200,
+        height: 150
+    },
+    bar: {
+        width: 200,
+        height: 10
+    },
 
     speeds: {
         player: PLAYER_SPEED,
         bot: {
             normal: PLAYER_SPEED,
+            slow: Math.round(BOT_SPEED_NORMAL / FACTOR_SLOW),
             slower: Math.round(BOT_SPEED_NORMAL / FACTOR_SLOWER),
-            frozen: Math.round(BOT_SPEED_NORMAL / FACTOR_FROZEN),
-            slow: Math.round(BOT_SPEED_NORMAL / FACTOR_SLOW)
+            frozen: Math.round(BOT_SPEED_NORMAL / FACTOR_FROZEN)
         },
         bullet: {
             normal: BULLET_SPEED_NORMAL,
+            slow: Math.round(BULLET_SPEED_NORMAL / FACTOR_SLOW),
             slower: Math.round(BULLET_SPEED_NORMAL / FACTOR_SLOWER),
-            frozen: Math.round(BULLET_SPEED_NORMAL / FACTOR_FROZEN),
-            slow: Math.round(BULLET_SPEED_NORMAL / FACTOR_SLOW)
+            frozen: Math.round(BULLET_SPEED_NORMAL / FACTOR_FROZEN)
         }
     },
 
     // 2 times per second
     fireRate: 1 / 2,
+    fastFireRate: 1 / 4,
+
+    hotswitchTimeout: 2.5,
+    superhotswitchTimeout: 0.5,
+
+    bigheadScale: 1.5,
+    chibiScale: 0.667,
 
     /**
      * Styling options.
@@ -284,7 +328,7 @@ var Supercold = {
             backgroundColor: 'rgb(10, 10, 10)'
         },
         background: {
-            lightColor: 'rgb(152, 152, 152)',
+            lightColor: 'rgb(150, 150, 150)',
             darkColor: 'rgb(64, 64, 64)'
         },
         overlay: {
@@ -297,7 +341,7 @@ var Supercold = {
             lineWidth: 6,
             shadowOffsetX: 0,
             shadowOffsetY: 0,
-            shadowColor: 'rgba(238, 238, 238, 0.95)',
+            shadowColor: 'rgba(242, 238, 238, 0.95)',
             shadowBlur: 12
         },
         bot: {
@@ -309,6 +353,37 @@ var Supercold = {
             shadowColor: 'rgba(255, 34, 33, 0.9)',
             shadowBlur: 6
         },
+        minimap: {
+            background: {
+                color: 'rgba(40, 40, 40, 0.5)'
+            },
+            border: {
+                color: 'rgba(64, 64, 64, 0.85)',
+                lineWidth: 5
+            },
+            innerBorder: {
+                color: 'rgba(64, 64, 64, 0.75)',
+                lineWidth: 2
+            },
+            player: {
+                radius: 4,
+                color: 'rgb(34, 34, 34)',
+                strokeStyle: 'rgba(44, 44, 44, 0.95)',
+                lineWidth: 1.5
+            },
+            bot: {
+                radius: 4,
+                color: 'rgb(255, 34, 33)',
+                strokeStyle: 'rgba(34, 34, 34, 0.95)',
+                lineWidth: 1.5
+            }
+        },
+        bulletBar: {
+            color: 'rgba(25, 28, 30, 0.9)'
+        },
+        hotswitchBar: {
+            color: 'rgba(250, 0, 0, 0.9)'
+        },
         bullet: {
             color: 'rgb(30, 35, 38)'
         },
@@ -318,11 +393,11 @@ var Supercold = {
             x2: 400,
             y2: 0,
             colorStops: [
-                {stop: 0.0, color: 'rgba(255, 34, 33, 0.00)'},
-                {stop: 0.1, color: 'rgba(255, 34, 33, 0.10)'},
-                {stop: 0.8, color: 'rgba(255, 34, 33, 0.85)'},
-                {stop: 0.9, color: 'rgba(255, 34, 33, 0.95)'},
-                {stop: 1.0, color: 'rgba(255, 34, 33, 0.85)'}
+                { stop: 0.0, color: 'rgba(255, 34, 33, 0.00)' },
+                { stop: 0.1, color: 'rgba(255, 34, 33, 0.10)' },
+                { stop: 0.8, color: 'rgba(255, 34, 33, 0.85)' },
+                { stop: 0.9, color: 'rgba(255, 34, 33, 0.95)' },
+                { stop: 1.0, color: 'rgba(255, 34, 33, 0.85)' }
             ],
             shadowOffsetX: 0,
             shadowOffsetY: 0,
@@ -330,11 +405,15 @@ var Supercold = {
             shadowBlur: 5
         },
         grid: {
-            color: 'rgb(245, 250, 255)',
+            color1: 'rgba(255, 245, 245, 0.85)',
+            color2: 'rgba(245, 245, 255, 0.85)',
+            colorOuter: 'rgba(255, 34, 33, 0.925)',
             shadowOffsetX: 0,
             shadowOffsetY: 0,
-            shadowColor: 'rgb(240, 251, 255)',
-            shadowBlur: 2
+            shadowColor1: 'rgba(220, 55, 55, 0.15)',
+            shadowColor2: 'rgba(240, 240, 255, 0.55)',
+            shadowColorOuter: 'rgba(255, 34, 33, 0.925)',
+            shadowBlur: 1
         },
         lines: {
             color: 'rgba(42, 65, 71, 0.0975)',
@@ -347,28 +426,28 @@ var Supercold = {
         },
         /* spots: [{
             colorStops: [
-                {stop: 0.00, color: 'rgba(254, 254, 254, 0.90)'},
-                {stop: 1.00, color: 'rgba(191, 234, 240, 0.00)'}
+                { stop: 0.00, color: 'rgba(254, 254, 254, 0.90)' },
+                { stop: 1.00, color: 'rgba(191, 234, 240, 0.00)' }
             ]
         }, {
             colorStops: [
-                {stop: 0.00, color: 'rgba(17, 15, 18, 0.60)'},
-                {stop: 0.25, color: 'rgba(33, 60, 71, 0.60)'},
-                {stop: 1.00, color: 'rgba(73, 142, 157, 0.05)'},
+                { stop: 0.00, color: 'rgba(17, 15, 18, 0.60)' },
+                { stop: 0.25, color: 'rgba(33, 60, 71, 0.60)' },
+                { stop: 1.00, color: 'rgba(73, 142, 157, 0.05)' },
             ]
         }], */
         flash: {
             colorStops: [
-                {stop: 0.0, color: 'rgba(255, 255, 255, 0.3)'},
-                {stop: 0.4, color: 'rgba(245, 255, 255, 0.6)'},
-                {stop: 0.5, color: 'rgba(240, 251, 255, 0.7)'},
-                {stop: 0.6, color: 'rgba(245, 255, 255, 0.8)'},
-                {stop: 1.0, color: 'rgba(255, 255, 255, 1.0)'}
+                { stop: 0.0, color: 'rgba(255, 255, 255, 0.3)' },
+                { stop: 0.4, color: 'rgba(245, 255, 255, 0.6)' },
+                { stop: 0.5, color: 'rgba(240, 251, 255, 0.7)' },
+                { stop: 0.6, color: 'rgba(245, 255, 255, 0.8)' },
+                { stop: 1.0, color: 'rgba(255, 255, 255, 1.0)' }
             ]
         },
         superhot: {
             font: 'Arial',
-            fontSize: '300px',
+            fontSize: '275px',
             fontWeight: 'normal',
             fill: 'rgb(245, 251, 255)',
             boundsAlignH: 'center',
@@ -435,23 +514,7 @@ var Supercold = {
 };
 
 
-// Make sure these dimensions divide the world dimensions evenly.
-Supercold.cell = {
-    width: Supercold.world.width / 32,
-    height: Supercold.world.height / 32
-};
-
-
 if (DEBUG) {
-    (function check() {
-        var x = Supercold.world.width / Supercold.cell.width,
-            y = Supercold.world.width / Supercold.cell.height;
-
-        if (x !== Math.round(x) || y !== Math.round(y)) {
-            log('WARN: Cells do not divide the world evenly!');
-        }
-    }());
-
     // Freeze objects in DEBUG mode to detect erroneous overriding,
     // but leave them open for modification in production code.
     if (Object.freeze) {
@@ -636,11 +699,11 @@ ScaledCenteredText.prototype._resize = function() {
 function getOverlayBitmap(game, color) {
     switch (color) {
         case 'light':
-            return game.cache.getBitmapData(CACHE_KEY_OVERLAY_LIGHT);
+            return game.cache.getBitmapData(CACHE.KEY.OVERLAY_LIGHT);
         case 'dark':
             /* falls through */
         default:
-            return game.cache.getBitmapData(CACHE_KEY_OVERLAY_DARK);
+            return game.cache.getBitmapData(CACHE.KEY.OVERLAY_DARK);
     }
 }
 
@@ -655,13 +718,13 @@ function newOverlay(game, color) {
  * @param {Array.<string>} text - The word/phrase to display.
  * @param {object} [options] - A customization object.
  * @param {number} [options.initDelay=0] - How long to wait before starting.
- * @param {number} [options.nextDelay=500] - How long to wait before showing next word.
- * @param {number} [options.duration=500] - .
- * @param {number} [options.flashOnDuration=50] - How long it will take to turn the flash on.
- * @param {number} [options.flashOffDuration=250] - How long it will take to turn the flash off.
+ * @param {number} [options.nextDelay=550] - How long to wait before showing the next word.
+ * @param {number} [options.duration=450] - How long the animation for each word will last.
+ * @param {number} [options.flashOnDuration=25] - How long it will take to turn the flash on.
+ * @param {number} [options.flashOffDuration=400] - How long it will take to turn the flash off.
  * @param {number} [options.flashTint=0xFFFFFF] - A tint to change the color of the flash.
  * @param {boolean} [options.repeat=false] - Repeat the announcement forever.
- * @param {boolean} [options.overlay=false] - .
+ * @param {boolean} [options.overlay=false] - Add a layer between the game and the text.
  * @param {string}  [options.overlayColor='dark'] - 'light' or 'dark' shade.
  * @param {function} [options.onComplete=noop] - An action to perform after the announcer is done.
  */
@@ -677,7 +740,7 @@ function Announcer(game, text, options) {
     }
 
     this.flash = game.add.existing(new CenteredImage(
-        game, game.cache.getBitmapData(CACHE_KEY_FLASH)));
+        game, game.cache.getBitmapData(CACHE.KEY.FLASH)));
     this.flash.name = 'Announcer flash';
     this.flash.alpha = 0;
     this.flash.tint = this.options.flashTint;
@@ -769,9 +832,9 @@ Announcer._addTextGroup = function(game, words) {
 
     group = game.add.group();
     group.name = 'Text group: "' + words + '"';
-    // Due to the way 'fixedToCamera' works (see 'cameraOffset'), set it for
-    // each text object individually (instead of setting it for the group).
-    // Check ./src/gameobjects/components/FixedToCamera.js
+    // Due to the way the 'fixedToCamera' property works, set it for each
+    // text object individually (instead of setting it for the group).
+    // https://phaser.io/docs/2.6.2/Phaser.Sprite.html#cameraOffset
     for (i = 0; i < words.length; ++i) {
         word = words[i];
         // In case of phrase instead of word, use the first word as index.
@@ -792,6 +855,45 @@ Announcer._addTextGroup = function(game, words) {
     return group;
 };
 
+
+/**
+ * Shows a tip to the player.
+ */
+function showTip() {
+    var tiplist = document.getElementById('tips'),
+        tips = tiplist.querySelectorAll('.tip'),
+        tip = tips[Math.floor(Math.random() * tips.length)];
+
+    tip.style.display = 'block';
+    tiplist.style.display = 'block';
+    document.getElementById('hint').style.display = 'block';
+}
+
+/**
+ * Shows a tip to the player probabilistically.
+ */
+function showTipRnd(chance) {
+    if (chance === undefined) chance = 0.75;
+    if (Math.random() < chance) {
+        showTip();
+    } else {
+        document.getElementById('hint').style.display = 'block';
+    }
+}
+
+/**
+ * Hides any tip previously shown to the player.
+ */
+function hideTip() {
+    var tiplist = document.getElementById('tips');
+
+    tiplist.style.display = 'none';
+    Array.prototype.forEach.call(tiplist.querySelectorAll('.tip'), function(tip) {
+        tip.style.display = 'none';
+    });
+    document.getElementById('hint').style.display = 'none';
+}
+
 /***************************** Scalable State *****************************/
 
 /**
@@ -809,10 +911,7 @@ Supercold._ScalableState = function(game) {
  * Sets the world size.
  */
 Supercold._ScalableState.prototype._setWorldBounds = function() {
-    var scale = this.camera.scale,
-        // Account for camera scaling (only when expansion is needed).
-        width = this.bounds.width * Math.max(1, scale.x),
-        height = this.bounds.height * Math.max(1, scale.y);
+    var width = this.bounds.width, height = this.bounds.height;
 
     // The world is a large fixed size space with (0, 0) in the center.
     this.world.setBounds(
@@ -851,18 +950,31 @@ Supercold._ScalableState.prototype.setScaling = function() {
  * @override
  */
 Supercold._ScalableState.prototype.resize = function(width, height) {
-    // Set scaling first, since the scale factor will be used next.
     this._setCameraScale(width, height);
-    // Reset the world size, because resizing messes it up.
-    this._setWorldBounds();
     if (DEBUG) log('Resized game.');
 };
 
 Supercold._ScalableState.prototype.addBackground = function() {
-    var background = this.add.image(0, 0, this.cache.getBitmapData(CACHE_KEY_BG));
+    var background = this.add.image(0, 0, this.cache.getBitmapData(CACHE.KEY.BG));
 
     background.anchor.set(0.5);
     return background;
+};
+
+/**
+ * Shows lots of debug info about various Phaser objects on the screen.
+ * @param {Phaser.Sprite} [sprite] - An optional sprite to show debug info for.
+ */
+Supercold._ScalableState.prototype.showDebugInfo = function(sprite) {
+    if (sprite) {
+        this.game.debug.spriteBounds(sprite);
+        this.game.debug.spriteInfo(sprite, DEBUG_POSX, 32);
+        this.game.debug.spriteCoords(sprite, DEBUG_POSX, 122);
+    }
+    this.game.debug.cameraInfo(this.camera, DEBUG_POSX, 200);
+    this.game.debug.inputInfo(DEBUG_POSX, 280);
+    this.game.debug.pointer(this.input.activePointer);
+    this.game.debug.text('DEBUG: ' + DEBUG, DEBUG_POSX, this.game.height-16);
 };
 
 /******************************* Boot State *******************************/
@@ -880,6 +992,12 @@ Supercold.Boot.prototype.init = function() {
     // Our game does not need multi-touch support,
     // so it is recommended to set this to 1.
     this.input.maxPointers = 1;
+    // Call event.preventDefault for DOM mouse events.
+    // NOTE: For some reason, as of February 2017 this doesn't work for right
+    // clicks (contextmenu event) at least on Chrome, Opera, FF and IE for Windows.
+    // Chrome also demonstrates this even worse behaviour:
+    // https://github.com/photonstorm/phaser/issues/2286
+    this.input.mouse.capture = true;
 
     // Let the game continue when the tab loses focus. This prevents cheating.
     this.stage.disableVisibilityChange = !DEBUG;
@@ -916,7 +1034,12 @@ function line(ctx, x1, y1, x2, y2) {
 /**
  * State used for loading or creating any assets needed in the game.
  */
-Supercold.Preloader = function(game) {};
+Supercold.Preloader = function(game) {
+    Supercold._ScalableState.call(this, game);
+};
+
+Supercold.Preloader.prototype = Object.create(Supercold._ScalableState.prototype);
+Supercold.Preloader.prototype.constructor = Supercold.Preloader;
 
 Supercold.Preloader.prototype._makeLiveEntityBitmap = function(style, key) {
     var player = Supercold.player, width, bmd, ctx;
@@ -934,6 +1057,7 @@ Supercold.Preloader.prototype._makeLiveEntityBitmap = function(style, key) {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
+    // Draw the circle.
     ctx.translate(bmd.width / 2, bmd.height / 2);
     ctx.save();
     ctx.shadowColor = style.shadowColor;
@@ -945,14 +1069,15 @@ Supercold.Preloader.prototype._makeLiveEntityBitmap = function(style, key) {
     ctx.stroke();
     ctx.restore();
 
-    ctx.translate(player.radius - Math.round(player.sideLen / 1.7), 0);
+    // Draw the nozzle outline.
+    ctx.translate(player.radius - Math.round(player.sideLen / 1.68), 0);
     ctx.rotate(-Math.PI / 2);
     ctx.beginPath();
     ctx.moveTo(-player.sideLen, 0);
     ctx.lineTo(0, player.sideLen);
     ctx.lineTo(player.sideLen, 0);
     ctx.stroke();
-
+    // Draw the nozzle.
     ctx.globalCompositeOperation = 'destination-over';
     ctx.shadowColor = style.shadowColor;
     ctx.shadowBlur = style.shadowBlur;
@@ -960,16 +1085,16 @@ Supercold.Preloader.prototype._makeLiveEntityBitmap = function(style, key) {
 };
 
 Supercold.Preloader.prototype._makePlayerBitmap = function() {
-    this._makeLiveEntityBitmap(Supercold.style.player, CACHE_KEY_PLAYER);
+    this._makeLiveEntityBitmap(Supercold.style.player, CACHE.KEY.PLAYER);
 };
 
 Supercold.Preloader.prototype._makeBotBitmap = function() {
-    this._makeLiveEntityBitmap(Supercold.style.bot, CACHE_KEY_BOT);
+    this._makeLiveEntityBitmap(Supercold.style.bot, CACHE.KEY.BOT);
 };
 
 Supercold.Preloader.prototype._makeBulletBitmap = function() {
     var bullet = Supercold.bullet,
-        bmd = makeBitmapData(this, bullet.width, bullet.height, CACHE_KEY_BULLET),
+        bmd = makeBitmapData(this, bullet.width, bullet.height, CACHE.KEY.BULLET),
         ctx = bmd.ctx;
 
     ctx.lineCap = 'round';
@@ -990,7 +1115,7 @@ Supercold.Preloader.prototype._makeTrailBitmap = function() {
     var style = Supercold.style.trail,
         height = Supercold.bullet.height,
         centerY = (height - 1) / 2,
-        bmd = makeBitmapData(this, style.x2, height, CACHE_KEY_TRAIL),
+        bmd = makeBitmapData(this, style.x2, height, CACHE.KEY.TRAIL),
         ctx = bmd.ctx;
 
     ctx.strokeStyle = createLinearGradient(
@@ -1013,7 +1138,7 @@ Supercold.Preloader.prototype._makeBackgroundBitmap = function() {
         paddedWidth = Supercold.world.width + PADDING.width*2,
         paddedHeight = Supercold.world.height + PADDING.height*2,
         skewFactor = Math.tan(Supercold.style.lines.angle),
-        bmd = makeBitmapData(this, paddedWidth, paddedHeight, CACHE_KEY_BG),
+        bmd = makeBitmapData(this, paddedWidth, paddedHeight, CACHE.KEY.BG),
         ctx = bmd.ctx, i;
 
     // Draw background colors. Dark padded area and lighter inside space.
@@ -1041,51 +1166,64 @@ Supercold.Preloader.prototype._makeBackgroundBitmap = function() {
 
     ctx.shadowOffsetX = Supercold.style.grid.shadowOffsetX;
     ctx.shadowOffsetY = Supercold.style.grid.shadowOffsetY;
-    ctx.strokeStyle = Supercold.style.grid.color;
-    ctx.shadowColor = Supercold.style.grid.shadowColor;
     ctx.shadowBlur = Supercold.style.grid.shadowBlur;
 
-    ctx.beginPath();
     // Draw horizontal lines
     ctx.save();
     ctx.translate(0, PADDING.height);
     // inside world
+    ctx.strokeStyle = Supercold.style.grid.color1;
+    ctx.shadowColor = Supercold.style.grid.shadowColor1;
+    ctx.beginPath();
     for (i = 0; i <= height; i += Supercold.cell.height) {
         ctx.moveTo(0, i);
         ctx.lineTo(paddedWidth, i);
     }
-    // in padded area
+    ctx.stroke();
+    // in outer area
+    ctx.strokeStyle = Supercold.style.grid.colorOuter;
+    ctx.shadowColor = Supercold.style.grid.shadowColorOuter;
+    ctx.beginPath();
     for (i = 0; i <= PADDING.height; i += Supercold.cell.height) {
         ctx.moveTo(0, -i);
         ctx.lineTo(paddedWidth, -i);
         ctx.moveTo(0, height + i);
         ctx.lineTo(paddedWidth, height + i);
     }
+    ctx.stroke();
     ctx.restore();
+
     // Draw vertical lines
     ctx.save();
     ctx.translate(PADDING.width, 0);
     // inside world
+    ctx.strokeStyle = Supercold.style.grid.color2;
+    ctx.shadowColor = Supercold.style.grid.shadowColor2;
+    ctx.beginPath();
     for (i = 0; i <= width; i += Supercold.cell.width) {
         ctx.moveTo(i, 0);
         ctx.lineTo(i, paddedHeight);
     }
-    // in padded area
+    ctx.stroke();
+    // in outer area
+    ctx.strokeStyle = Supercold.style.grid.colorOuter;
+    ctx.shadowColor = Supercold.style.grid.shadowColorOuter;
+    ctx.beginPath();
     for (i = 0; i <= PADDING.width; i += Supercold.cell.width) {
         ctx.moveTo(-i, 0);
         ctx.lineTo(-i, paddedHeight);
         ctx.moveTo(width + i, 0);
         ctx.lineTo(width + i, paddedHeight);
     }
-    ctx.restore();
     ctx.stroke();
+    ctx.restore();
 };
 
 Supercold.Preloader.prototype._makeFlashBitmap = function() {
     var centerX = (NATIVE_WIDTH - 1) / 2,
         centerY = (NATIVE_HEIGHT - 1) / 2,
         radius = Math.min(centerX, centerY),
-        bmd = makeBitmapData(this, NATIVE_WIDTH, NATIVE_HEIGHT, CACHE_KEY_FLASH),
+        bmd = makeBitmapData(this, NATIVE_WIDTH, NATIVE_HEIGHT, CACHE.KEY.FLASH),
         ctx = bmd.ctx;
 
     // Create an oval flash.
@@ -1102,9 +1240,9 @@ Supercold.Preloader.prototype._makeFlashBitmap = function() {
 Supercold.Preloader.prototype._makeOverlayBitmaps = function() {
     var bmd;
 
-    bmd = makeBitmapData(this, NATIVE_WIDTH, NATIVE_HEIGHT, CACHE_KEY_OVERLAY_DARK);
+    bmd = makeBitmapData(this, NATIVE_WIDTH, NATIVE_HEIGHT, CACHE.KEY.OVERLAY_DARK);
     bmd.rect(0, 0, bmd.width, bmd.height, Supercold.style.overlay.darkColor);
-    bmd = makeBitmapData(this, NATIVE_WIDTH, NATIVE_HEIGHT, CACHE_KEY_OVERLAY_LIGHT);
+    bmd = makeBitmapData(this, NATIVE_WIDTH, NATIVE_HEIGHT, CACHE.KEY.OVERLAY_LIGHT);
     bmd.rect(0, 0, bmd.width, bmd.height, Supercold.style.overlay.lightColor);
 };
 
@@ -1113,6 +1251,9 @@ Supercold.Preloader.prototype.preload = function() {};
 
 Supercold.Preloader.prototype.create = function() {
     if (DEBUG) log('Creating Preloader state...');
+
+    // Scaling should be specified first.
+    this.setScaling();
 
     this._makePlayerBitmap();
     this._makeBotBitmap();
@@ -1163,10 +1304,7 @@ Supercold.MainMenu.prototype.create = function() {
  */
 Supercold.MainMenu.prototype.render = function() {
     if (DEBUG) {
-        this.game.debug.cameraInfo(this.camera, DEBUG_POSX, 128);
-        this.game.debug.inputInfo(DEBUG_POSX, 128+64+32);
-        this.game.debug.pointer(this.input.activePointer);
-        this.game.debug.text('DEBUG: ' + DEBUG, DEBUG_POSX, this.game.height-16);
+        this.showDebugInfo();
     }
 };
 
@@ -1196,130 +1334,22 @@ Supercold.Intro.prototype.create = function() {
         onComplete: (function startLevel() {
             // Start at the last level that the player was in or the first one.
             this.state.start('Game', CLEAR_WORLD, CLEAR_CACHE, {
-                level: Supercold.storage.getLevel()
+                level: Supercold.storage.loadLevel()
             });
         }).bind(this)
     }).announce();
 };
 
+/**
+ * Used here for debugging purposes.
+ */
+Supercold.Intro.prototype.render = function() {
+    if (DEBUG) {
+        this.showDebugInfo();
+    }
+};
+
 /******************************* Game State *******************************/
-
-function BulletTrailManager(game) {
-    this.camera = game.camera;
-    this.math = game.math;
-
-    this._liveTrails = {};
-    this._deadTrails = {};
-    this._trailBmd = game.cache.getBitmapData(CACHE_KEY_TRAIL);
-    this._bmd = game.make.bitmapData(game.world.width, game.world.height);
-
-    this._bmd.addToWorld(0, 0, 0.5, 0.5);
-    // Take into account where the world (0, 0) coords are.
-    this._bmd.ctx.translate(-game.world.bounds.x, -game.world.bounds.y);
-}
-
-BulletTrailManager.prototype.destroy = function() {
-    this._bmd.destroy();
-};
-
-BulletTrailManager.prototype._getLength = function(bullet, trail) {
-    return Math.min(
-        this.math.distance(bullet.x, bullet.y, trail.startX, trail.startY),
-        this._trailBmd.width);
-};
-
-BulletTrailManager.prototype.addTrail = function(bullet) {
-    this._liveTrails[bullet.name] = {
-        bullet: bullet,
-        startX: bullet.x,
-        startY: bullet.y
-    };
-};
-
-BulletTrailManager.prototype.stopTrail = function(bullet) {
-    var trail = this._liveTrails[bullet.name];
-
-    // Check if the trail exists, because the col. handler may be called twice!
-    if (trail) {
-        this._deadTrails[bullet.name] = {
-            rotation: bullet.body.rotation,
-            stopX: bullet.x,
-            stopY: bullet.y,
-            offsetX: bullet.offsetX,
-            offsetY: bullet.offsetY,
-            curLength: this._getLength(bullet, trail)
-        };
-        delete this._liveTrails[bullet.name];
-    }
-};
-
-BulletTrailManager.prototype._destroyTrail = function(bullet) {
-    delete this._liveTrails[bullet.name];
-};
-
-BulletTrailManager.prototype._drawTrail = function(
-        bulletX, bulletY, bulletRotation, trailLength, offsetX, offsetY) {
-    var ctx = this._bmd.ctx;
-
-    ctx.save();
-    // Move (0, 0) to the bullet coords,
-    ctx.translate(bulletX, bulletY);
-    // rotate the canvas as much as the bullet is rotated,
-    ctx.rotate(bulletRotation);
-    // move behind the bullet as needed (+ 4 for hiding the round cap),
-    ctx.translate(-trailLength - offsetX + 4, -offsetY);
-    // squeeze the trail on the x-axis,
-    ctx.scale(trailLength / this._trailBmd.width, 1);
-    // and draw it, at last.
-    ctx.drawImage(this._trailBmd.canvas, 0, 0);
-    ctx.restore();
-
-    this._bmd.dirty = true;
-};
-
-BulletTrailManager.prototype.updateTrails = function(elapsedTime) {
-    var view = this.camera.view, scale = this.camera.scale, slack = 1.1,
-        name, trail, bullet, length;
-
-    // Clear the camera view only. We need to take scaling into account.
-    this._bmd.clear(
-        // Adjust the x/y coords (move to the left/top, accordingly).
-        // Note the slack value fix when we are in a negative quadrant.
-        Math.floor((view.x / scale.x) / ((view.x > 0) ? slack : 1/slack)),
-        Math.floor((view.y / scale.y) / ((view.y > 0) ? slack : 1/slack)),
-        // Adjust the view dimensions (double the slack due to the x/y fix).
-        Math.ceil((view.width / scale.x) * (2 * slack)),
-        Math.ceil((view.height / scale.y) * (2 * slack)));
-
-    for (name in this._liveTrails) {
-        if (!this._liveTrails.hasOwnProperty(name))
-            continue;
-        trail = this._liveTrails[name];
-
-        bullet = trail.bullet;
-        // Don't round this value, since it causes jitter.
-        length = this._getLength(bullet, trail);
-
-        this._drawTrail(bullet.x, bullet.y, bullet.rotation,
-                        length, bullet.offsetX, bullet.offsetY);
-    }
-    for (name in this._deadTrails) {
-        if (!this._deadTrails.hasOwnProperty(name))
-            continue;
-        trail = this._deadTrails[name];
-
-        // Don't round this value, since it causes jitter.
-        trail.curLength -= Supercold.speeds.bullet.normal * elapsedTime;
-        if (trail.curLength < 0) {
-            this._destroyTrail(trail);
-            continue;                   // No trail to draw.
-        }
-
-        this._drawTrail(trail.stopX, trail.stopY, trail.rotation,
-                        trail.curLength, trail.offsetX, trail.offsetY);
-    }
-};
-
 
 /***** Sprites and Groups *****/
 
@@ -1334,8 +1364,8 @@ BulletTrailManager.prototype.updateTrails = function(elapsedTime) {
 function LiveSprite(game, x, y, key, _frame) {
     Phaser.Sprite.call(this, game, x, y, key, _frame);
 
-    // Elapsed time since last bullet was fired.
-    this.elapsedTime = Supercold.fireRate;
+    // Time until the next bullet can be fired.
+    this.remainingTime = 0;
 }
 
 LiveSprite.prototype = Object.create(Phaser.Sprite.prototype);
@@ -1344,15 +1374,17 @@ LiveSprite.prototype.constructor = LiveSprite;
 /**
  * The player.
  */
-function Player(game, x, y, _key, _frame) {
-    LiveSprite.call(this, game, x, y, game.cache.getBitmapData(CACHE_KEY_PLAYER));
+function Player(game, x, y, scale) {
+    scale = scale || 1;
+    LiveSprite.call(this, game, x, y, game.cache.getBitmapData(CACHE.KEY.PLAYER));
 
     this.name = 'Player';
+    this.scale.set(scale);
     this.game.add.existing(this);
 
     // No group for Player, so enable physics here.
     this.game.physics.enable(this, PHYSICS_SYSTEM, DEBUG);
-    this.body.setCircle(Supercold.player.radius);
+    this.body.setCircle(Supercold.player.radius * scale);
 }
 
 Player.prototype = Object.create(LiveSprite.prototype);
@@ -1367,7 +1399,7 @@ Player.prototype.kill = function() {
  * A bot.
  */
 function Bot(game, x, y, _key, _frame) {
-    LiveSprite.call(this, game, x, y, game.cache.getBitmapData(CACHE_KEY_BOT));
+    LiveSprite.call(this, game, x, y, game.cache.getBitmapData(CACHE.KEY.BOT));
 
     this.name = 'Bot ' + Bot.count++;
     /**
@@ -1398,7 +1430,7 @@ Bot.prototype.kill = function() {
  * A bullet fired from a LiveSprite.
  */
 function Bullet(game, x, y, _key, _frame) {
-    Phaser.Sprite.call(this, game, x, y, game.cache.getBitmapData(CACHE_KEY_BULLET));
+    Phaser.Sprite.call(this, game, x, y, game.cache.getBitmapData(CACHE.KEY.BULLET));
 
     /**
      * Who shot the bullet.
@@ -1406,8 +1438,11 @@ function Bullet(game, x, y, _key, _frame) {
     this.owner = null;
 
     this.name = 'Bullet ' + Bullet.count++;
-    this.checkWorldBounds = true;
-    this.outOfBoundsKill = true;
+    // Using these properties does NOT work, because when checking the world
+    // bounds in the preUpdate method, the world scale is not taken into account!
+    // THIS TOOK ME A LONG TIME TO FIND OUT. -.-'
+    //this.checkWorldBounds = true;
+    //this.outOfBoundsKill = true;
 }
 
 Bullet.count = 0;
@@ -1415,24 +1450,86 @@ Bullet.count = 0;
 Bullet.prototype = Object.create(Phaser.Sprite.prototype);
 Bullet.prototype.constructor = Bullet;
 
+/**
+ * Cached variable for the scaled world bounds.
+ */
+Bullet._worldBounds = new Phaser.Rectangle();
+
+/**
+ * Overriden preUpdate method to handle world scaling and outOfBounds correctly.
+ * TODO: Find a better way to do this!
+ */
+Bullet.prototype.preUpdate = function() {
+    var camera = this.game.camera, scale = camera.scale;
+
+    if (!Phaser.Sprite.prototype.preUpdate.call(this)) return false;
+    if (!this.alive) return false;
+
+    // Scale the world bounds.
+    Bullet._worldBounds.copyFrom(this.game.world.bounds);
+    Bullet._worldBounds.x *= scale.x;
+    Bullet._worldBounds.y *= scale.y;
+    Bullet._worldBounds.x -= camera.view.x;
+    Bullet._worldBounds.y -= camera.view.y;
+    Bullet._worldBounds.width *= scale.x;
+    Bullet._worldBounds.height *= scale.y;
+    if (!Bullet._worldBounds.intersects(this.getBounds())) {
+        this.kill();
+        return false;
+    }
+    return true;
+};
+
 Bullet.prototype.kill = function() {
     // TODO: Add fancy kill effect.
     Phaser.Sprite.prototype.kill.call(this);
 };
+
+/**
+ * The trail that a bullet leaves behind.
+ */
+function BulletTrail(game, x, y, _key, _frame) {
+    Phaser.Image.call(this, game, x, y, game.cache.getBitmapData(CACHE.KEY.TRAIL));
+
+    /**
+     * The bullet that this trail belongs to.
+     * May be null if the bullet was destroyed recently.
+     */
+    this.bullet = null;
+    /**
+     * Reference point for this trail (where it starts or stops).
+     */
+    this.refX = 0;
+    this.refY = 0;
+
+    this.name = 'Trail ' + BulletTrail.count++;
+    this.anchor.x = 1;
+    this.anchor.y = 0.5;
+}
+
+BulletTrail.count = 0;
+
+BulletTrail.prototype = Object.create(Phaser.Image.prototype);
+BulletTrail.prototype.constructor = BulletTrail;
 
 
 function extendName(sprite, group) {
     sprite.name += ', ' + (group.length-1) + ' in ' + group.name;
 }
 
+
 /**
  * A group of 'Bot's with enabled physics.
  */
-function BotGroup(game, name, parent) {
+function BotGroup(game, scale, name, _parent) {
     name = name || 'Bots';
-    Phaser.Group.call(this, game, parent, name, false, true, PHYSICS_SYSTEM);
+    Phaser.Group.call(this, game, _parent, name, false, true, PHYSICS_SYSTEM);
 
+    this._scale = scale;
     this.classType = Bot;
+
+    // Bots receive input (for hotswitching).
+    this.inputEnableChildren = true;
 }
 
 BotGroup.prototype = Object.create(Phaser.Group.prototype);
@@ -1441,9 +1538,16 @@ BotGroup.prototype.constructor = BotGroup;
 BotGroup.prototype.create = function(x, y) {
     var bot = Phaser.Group.prototype.create.call(this, x, y, null, null);
 
-    extendName(bot, this);
-    bot.body.setCircle(Supercold.player.radius);
+    if (DEBUG) extendName(bot, this);
+    bot.scale.set(this._scale);
+    bot.body.setCircle(Supercold.player.radius * this._scale);
     bot.body.debug = DEBUG;
+
+    // Players may click near the bot to shoot.
+    bot.input.pixelPerfectClick = true;
+    // Used for accurately using the hand cursor.
+    bot.input.pixelPerfectOver = true;
+    bot.input.useHandCursor = true;
 
     return bot;
 };
@@ -1451,9 +1555,9 @@ BotGroup.prototype.create = function(x, y) {
 /**
  * A group of 'Bullet's with enabled physics.
  */
-function BulletGroup(game, name, parent) {
+function BulletGroup(game, name, _parent) {
     name = name || 'Bullets';
-    Phaser.Group.call(this, game, parent, name, false, true, PHYSICS_SYSTEM);
+    Phaser.Group.call(this, game, _parent, name, false, true, PHYSICS_SYSTEM);
 
     this.classType = Bullet;
 }
@@ -1466,7 +1570,7 @@ BulletGroup.prototype.create = function() {
         specs = Supercold.bullet,
         offsetX = (specs.width - specs.bodyLen) / 2;
 
-    extendName(bullet, this);
+    if (DEBUG) extendName(bullet, this);
     // Set two shapes to closely resemble the shape of the bullet.
     bullet.body.setRectangle(specs.bodyLen, specs.height, -offsetX);
     bullet.body.addCircle(specs.tipRadius, offsetX);
@@ -1483,6 +1587,233 @@ BulletGroup.prototype.create = function() {
 
     return bullet;
 };
+
+/**
+ * A group of 'BulletTrail's.
+ */
+function BulletTrailGroup(game, _name, _parent) {
+    Phaser.Group.call(this, game, _parent, 'BulletTrails');
+    this.classType = BulletTrail;
+}
+
+BulletTrailGroup.prototype = Object.create(Phaser.Group.prototype);
+BulletTrailGroup.prototype.constructor = BulletTrailGroup;
+
+BulletTrailGroup.prototype.create = function() {
+    var trail = Phaser.Group.prototype.create.call(this, 0, 0, null, null, false);
+
+    if (DEBUG) extendName(trail, this);
+    return trail;
+};
+
+
+function BulletTrailPainter(game) {
+    this.math = game.math;
+
+    this._liveTrails = {};
+    this._deadTrails = {};
+    this._trailGroup = new BulletTrailGroup(game);
+}
+
+BulletTrailPainter.prototype._getLength = function(bullet, trail) {
+    return Math.min(
+        this.math.distance(bullet.x, bullet.y, trail.refX, trail.refY),
+        trail.texture.width);
+};
+
+BulletTrailPainter.prototype.addTrail = function(bullet) {
+    var trail = this._trailGroup.getFirstDead(true);
+
+    trail.rotation = bullet.body.rotation;
+    trail.bullet = bullet;
+    trail.refX = bullet.x;
+    trail.refY = bullet.y;
+    trail.width = 0;
+    trail.revive();
+    this._liveTrails[bullet.name] = trail;
+};
+
+BulletTrailPainter.prototype.stopTrail = function(bullet) {
+    var trail = this._liveTrails[bullet.name];
+
+    // Check if the trail exists, since the handler may be called more than once!
+    if (trail) {
+        trail.refX = bullet.x;
+        trail.refY = bullet.y;
+        this._deadTrails[trail.name] = trail;
+        delete this._liveTrails[bullet.name];
+    }
+};
+
+BulletTrailPainter.prototype.updateTrails = function(elapsedTime) {
+    var name, trail;
+
+    for (name in this._liveTrails) {
+        if (!this._liveTrails.hasOwnProperty(name))
+            continue;
+        trail = this._liveTrails[name];
+
+        // Don't round this value, since it causes jitter.
+        trail.width = this._getLength(trail.bullet, trail);
+        trail.x = trail.bullet.x;
+        trail.y = trail.bullet.y;
+    }
+    for (name in this._deadTrails) {
+        if (!this._deadTrails.hasOwnProperty(name))
+            continue;
+        trail = this._deadTrails[name];
+
+        // Don't round this value, since it causes jitter.
+        trail.width -= Supercold.speeds.bullet.normal * elapsedTime;
+        if (trail.width < 0) {
+            trail.kill();
+            delete this._deadTrails[name];
+        }
+    }
+};
+
+
+/**
+ * Abstract base class for heads-up displays.
+ */
+function HUD(game, options) {
+    this.hud = makeBitmapData(
+        game, options.width, options.height, options.key, true);
+    this.hudImage = this.hud.addToWorld(
+        game.camera.width - (options.x + options.width)*game.camera.scale.x,
+        game.camera.height - options.y*game.camera.scale.y,
+        0, 1);
+
+    this.hudImage.fixedToCamera = true;
+    game.scale.onSizeChange.add(function resize() {
+        this.hudImage.x = game.camera.width -
+            (options.x + this.hud.width)*game.camera.scale.x;
+        this.hudImage.y = game.camera.height - options.y*game.camera.scale.y;
+        this.hudImage.cameraOffset.set(this.hudImage.x, this.hudImage.y);
+    }, this);
+}
+
+HUD.prototype.update = function() {
+    throw new Error('Abstract base class');
+};
+
+
+function Minimap(game) {
+    HUD.call(this, game, {
+        x: Minimap.x,
+        y: Minimap.y,
+        width: Supercold.minimap.width,
+        height: Supercold.minimap.height,
+        key: 'Minimap'
+    });
+
+    this._ratio = {
+        x: Supercold.minimap.width / game.world.bounds.width,
+        y: Supercold.minimap.height / game.world.bounds.height
+    };
+}
+
+/**
+ * Coordinates for the bottom-right corner.
+ */
+Minimap.x = 10;
+Minimap.y = 10;
+
+Minimap.prototype = Object.create(HUD.prototype);
+Minimap.prototype.constructor = Minimap;
+
+Minimap.prototype._markEntity = function(entity, style) {
+    var ctx = this.hud.ctx;
+
+    ctx.fillStyle = style.color;
+    ctx.strokeStyle = style.strokeStyle;
+    ctx.lineWidth = style.lineWidth;
+    // Just draw a circle.
+    circle(ctx, entity.x * this._ratio.x, entity.y * this._ratio.y, style.radius);
+    ctx.fill();
+    ctx.stroke();
+};
+
+Minimap.prototype._markPlayer = function(player) {
+    this._markEntity(player, Supercold.style.minimap.player);
+};
+
+Minimap.prototype._markBot = function(bot) {
+    this._markEntity(bot, Supercold.style.minimap.bot);
+};
+
+Minimap.prototype.update = function(player, bots) {
+    var map = this.hud, ctx = map.ctx,
+        padX = PADDING.width * this._ratio.x,
+        padY = PADDING.height * this._ratio.y;
+
+    ctx.clearRect(0, 0, map.width, map.height);
+    ctx.fillStyle = Supercold.style.minimap.background.color;
+    ctx.fillRect(0, 0, map.width, map.height);
+    ctx.strokeStyle = Supercold.style.minimap.border.color;
+    ctx.lineWidth = Supercold.style.minimap.border.lineWidth;
+    ctx.strokeRect(0, 0, map.width, map.height);
+
+    ctx.strokeStyle = Supercold.style.minimap.innerBorder.color;
+    ctx.lineWidth = Supercold.style.minimap.innerBorder.lineWidth;
+    ctx.strokeRect(padX, padY, map.width - 2*padX, map.height - 2*padY);
+    ctx.restore();
+
+    ctx.save();
+    // The (0, 0) coordinates of our world are in the center!
+    ctx.translate(map.width / 2, map.height / 2);
+    bots.forEachAlive(this._markBot, this);
+    this._markPlayer(player);
+    ctx.restore();
+    map.dirty = true;
+};
+
+
+function ReloadBar(game, x, y, key, fillStyle) {
+    HUD.call(this, game, {
+        x: x,
+        y: y,
+        width: Supercold.bar.width,
+        height: Supercold.bar.height,
+        key: key
+    });
+    this.hud.rect(0, 0, this.hud.width, this.hud.height, fillStyle);
+}
+
+ReloadBar.prototype = Object.create(HUD.prototype);
+ReloadBar.prototype.constructor = ReloadBar;
+
+ReloadBar.prototype.update = function(percentage) {
+    this.hudImage.width = this.hudImage.texture.width * percentage;
+};
+
+function HotswitchBar(game) {
+    ReloadBar.call(this, game, HotswitchBar.x, HotswitchBar.y, 'HotswitchBar',
+                   Supercold.style.hotswitchBar.color);
+}
+
+/**
+ * Coordinates for the bottom-right corner.
+ */
+HotswitchBar.x = 10;
+HotswitchBar.y = Minimap.y + Supercold.minimap.height + 2;
+
+HotswitchBar.prototype = Object.create(ReloadBar.prototype);
+HotswitchBar.prototype.constructor = HotswitchBar;
+
+function BulletBar(game) {
+    ReloadBar.call(this, game, BulletBar.x, BulletBar.y, 'BulletBar',
+                   Supercold.style.bulletBar.color);
+}
+
+/**
+ * Coordinates for the bottom-right corner.
+ */
+BulletBar.x = 10;
+BulletBar.y = HotswitchBar.y + Supercold.bar.height + 2;
+
+BulletBar.prototype = Object.create(ReloadBar.prototype);
+BulletBar.prototype.constructor = BulletBar;
 
 
 Supercold.Game = function(game) {
@@ -1508,14 +1839,24 @@ Supercold.Game = function(game) {
         wasd: null,
         fireKey: null
     };
-    this._trailManager = null;
+    this._mutators = null;
+    this._bulletTrailPainter = null;
+    this._huds = {
+        minimap: null,
+        bulletBar: null,
+        hotswitchBar: null
+    };
 
     // These will be set in init.
     this.level = -1;
     this._totalBotCount = -1;
 
+    this._fireRate = 0;
     // Time remaining since next bot spawn.
     this._nextBotTime = 0;
+    // Time remaining since next hotswitch.
+    this._nextHotSwitch = 0;
+    this._hotswitching = false;
 
     // Internal cached objects.
     this._cached = {
@@ -1534,58 +1875,61 @@ Object.defineProperty(Supercold.Game.prototype, 'superhot', {
     }
 });
 
+Object.defineProperty(Supercold.Game.prototype, '_hotswitchTimeout', {
+    get: function() {
+        return (this._mutators.superhotswitch) ?
+            Supercold.superhotswitchTimeout : Supercold.hotswitchTimeout;
+    }
+});
+
+Object.defineProperty(Supercold.Game.prototype, '_spriteScale', {
+    get: function() {
+        if (this._mutators.bighead && this._mutators.chibi) return 1;
+        if (this._mutators.bighead) return Supercold.bigheadScale;
+        if (this._mutators.chibi) return Supercold.chibiScale;
+        return 1;
+    }
+});
+
 
 Supercold.Game.prototype.init = function(options) {
     this.level = options.level;
     this._totalBotCount = 4 + Math.floor(this.level * 0.75);
+    this._mutators = Supercold.storage.loadMutators();
 };
 
 
-Supercold.Game.prototype._addBullets = function() {
-    function addTrail(bullet) {
-        /*jshint validthis: true */
-        this._trailManager.addTrail(bullet);
-    }
-    function stopTrail(bullet) {
-        /*jshint validthis: true */
-        this._trailManager.stopTrail(bullet);
-    }
+function bulletHandler(myBullet, otherBullet) {
+   myBullet.sprite.kill();
+   // The other bullet will be killed by the other handler call.
+   // TODO: Add fancy effects.
+}
 
-    function bulletHandler(myBullet, otherBullet) {
-       myBullet.sprite.kill();
-       // The other bullet will be killed by the other handler call.
-       // TODO: Add fancy effects.
-    }
+Supercold.Game.prototype._addTrail = function(bullet) {
+    this._bulletTrailPainter.addTrail(bullet);
+};
+Supercold.Game.prototype._stopTrail = function(bullet) {
+    this._bulletTrailPainter.stopTrail(bullet);
+};
 
-    function createBullets(context, group, quantity, colGroups) {
-        var i, child;
+Supercold.Game.prototype._createBullet = function(group, myColGroup) {
+    var bullet = group.create();
 
-        for (i = 0; i < quantity; ++i) {
-            child = group.create();
-            child.events.onRevived.add(addTrail, context);
-            child.events.onKilled.add(stopTrail, context);
-            child.body.setCollisionGroup(colGroups.mine);
-            child.body.collides(colGroups.other);
-            child.body.collides(colGroups.bullets, bulletHandler, context);
-        }
-    }
+    bullet.events.onRevived.add(this._addTrail, this);
+    bullet.events.onKilled.add(this._stopTrail, this);
+    bullet.body.setCollisionGroup(myColGroup);
+    // All bullets collide with all other bullets and all live entities.
+    bullet.body.collides([this._colGroups.player, this._colGroups.bots]);
+    bullet.body.collides([this._colGroups.playerBullets, this._colGroups.botBullets],
+                         bulletHandler, this);
+    return bullet;
+};
 
-    var playerBulletCount = 12, botsBulletCount = 4 * this._totalBotCount;
-
-    this._groups.playerBullets = new BulletGroup(this.game, 'Player Bullets');
-    // The bullets of the player collide with the bots and their bullets.
-    createBullets(this, this._groups.playerBullets, playerBulletCount, {
-        mine: this._colGroups.playerBullets,
-        other: this._colGroups.bots,
-        bullets: this._colGroups.botBullets
-    });
-    this._groups.botBullets = new BulletGroup(this.game, 'Bot Bullets');
-    // The bullets of the bots collide with all bullets and all live entities.
-    createBullets(this, this._groups.botBullets, botsBulletCount, {
-        mine: this._colGroups.botBullets,
-        other: [this._colGroups.player, this._colGroups.bots],
-        bullets: [this._colGroups.playerBullets, this._colGroups.botBullets]
-    });
+Supercold.Game.prototype._createPlayerBullet = function() {
+    return this._createBullet(this._groups.playerBullets, this._colGroups.playerBullets);
+};
+Supercold.Game.prototype._createBotBullet = function() {
+    return this._createBullet(this._groups.botBullets, this._colGroups.botBullets);
 };
 
 Supercold.Game.prototype._createPlayerBound = function(rect, i, collisionGroup) {
@@ -1597,42 +1941,46 @@ Supercold.Game.prototype._createPlayerBound = function(rect, i, collisionGroup) 
         rect.width, rect.height, rect.halfWidth, rect.halfHeight);
     bound.body.setCollisionGroup(collisionGroup);
     // The bounds collide with the player.
-    bound.body.collides(this._colGroups.player);
+    if (!DEBUG) {
+        bound.body.collides(this._colGroups.player);
+    }
     bound.body.debug = DEBUG;
 };
 
 /**
- * Create boundaries around the world that restrict the player's movement.
+ * Creates boundaries around the world that restrict the player's movement.
  */
 Supercold.Game.prototype._addPlayerBounds = function(collisionGroup) {
     var bounds = this.bounds;
 
     this._sprites.bounds = this.add.physicsGroup(PHYSICS_SYSTEM);
     this._sprites.bounds.name = 'Player Bounds';
+    // Note that all invisible walls have double the width or height in order to
+    // prevent the player from getting out of the world bounds when hotswitching.
     [new Phaser.Rectangle(
         // Top
-        bounds.left,                        // x
-        bounds.top,                         // y
-        bounds.width,                       // width
-        PADDING.height                      // height
+        bounds.left - PADDING.width,        // x
+        bounds.top - PADDING.height,        // y
+        bounds.width + PADDING.width*2,     // width
+        PADDING.height * 2                  // height
     ), new Phaser.Rectangle(
         // Bottom
-        bounds.left,
+        bounds.left - PADDING.width,
         bounds.bottom - PADDING.height,
-        bounds.width,
-        PADDING.height
+        bounds.width + PADDING.width*2,
+        PADDING.height * 2
     ), new Phaser.Rectangle(
         // Left
-        bounds.left,
-        bounds.top,
-        PADDING.width,
-        bounds.height
+        bounds.left - PADDING.width,
+        bounds.top - PADDING.height,
+        PADDING.width * 2,
+        bounds.height + PADDING.height*2
     ), new Phaser.Rectangle(
         // Right
         bounds.right - PADDING.width,
-        bounds.top,
-        PADDING.width,
-        bounds.height
+        bounds.top - PADDING.height,
+        PADDING.width * 2,
+        bounds.height + PADDING.height*2
     )].forEach(function(rect, index) {
         this._createPlayerBound(rect, index, collisionGroup);
     }, this);
@@ -1644,7 +1992,7 @@ Supercold.Game.prototype._superhot = function() {
     this._sprites.player.body.setZeroVelocity();
 
     // TODO: Add fancy effect.
-    Supercold.storage.setLevel(newLevel);
+    Supercold.storage.saveLevel(newLevel);
     this.time.events.add(DELAY, function superhot() {
         var superhot = Supercold.texts.SUPERHOT.split(' '),
             announcer = new Announcer(this.game, superhot, {
@@ -1664,44 +2012,50 @@ Supercold.Game.prototype._superhot = function() {
     }, this);
 };
 
-Supercold.Game.prototype._spawnBot = function() {
-    function botKillHandler(bot, bullet, botShape, bulletShape) {
-        /*jshint validthis: true */
-
-        // Don't let a bot be killed by its own bullet!
-        if (bullet.sprite.owner === bot.sprite)
-            return;
-        bot.sprite.kill();
-        bullet.sprite.kill();
-        if (this.superhot) {
-            this._superhot();       // SUPERHOT!
-        }
+Supercold.Game.prototype._botKillHandler = function(bot, bullet, _botS, _bulletS) {
+    bot.sprite.kill();
+    bullet.sprite.kill();
+    if (this.superhot) {
+        this._superhot();       // SUPERHOT!
     }
+};
 
-    var bounds = this.bounds, colGroups = this._colGroups, bot;
+Supercold.Game.prototype._spawnBot = function() {
+    var view = this.camera.view, colGroups = this._colGroups,
+        offset = (Supercold.player.radius * this._spriteScale) * 2 * 1.2,
+        baseX, baseY, bot;
 
-    bot = this._groups.bots.create(
-        this.rnd.sign() * this.rnd.between(bounds.left, bounds.left + PADDING.width),
-        this.rnd.sign() * this.rnd.between(bounds.top, bounds.top + PADDING.height));
+    baseX = ((this.rnd.between(0, 1)) ? view.left : view.right) * 1.2;
+    baseY = ((this.rnd.between(0, 1)) ? view.top : view.bottom) * 1.2;
+
+    bot = this._groups.bots.getFirstDead(
+        true,
+        this.rnd.between(baseX, baseX + offset),
+        this.rnd.between(baseY, baseY + offset));
+    bot.alpha = 0.1;
+    this.add.tween(bot).to({
+        alpha: 1
+    }, 800, Phaser.Easing.Linear.None, AUTOSTART);
     bot.body.setCollisionGroup(colGroups.bots);
     // Bots collide against themselves, the player and all bullets.
     bot.body.collides([colGroups.bots, colGroups.player]);
     bot.body.collides(
-        [colGroups.botBullets, colGroups.playerBullets], botKillHandler, this);
+        [colGroups.botBullets, colGroups.playerBullets], this._botKillHandler, this);
 };
 
 
 Supercold.Game.prototype.restart = function restart() {
+    hideTip();
     this.state.restart(CLEAR_WORLD, CLEAR_CACHE, {level: this.level});
 };
 
 Supercold.Game.prototype.quit = function quit() {
+    hideTip();
     this.state.start('MainMenu');
 };
 
-
 Supercold.Game.prototype.create = function() {
-    var radius = Supercold.player.radius, player, boundsColGroup;
+    var radius = Supercold.player.radius * this._spriteScale, player, boundsColGroup;
 
     if (DEBUG) log('Creating Game state: Level ' + this.level + '...');
 
@@ -1719,11 +2073,10 @@ Supercold.Game.prototype.create = function() {
 
     this.physics.p2.updateBoundsCollisionGroup();
 
-    this._trailManager = new BulletTrailManager(this);
+    this._bulletTrailPainter = new BulletTrailPainter(this.game);
     // Create the bullet groups first, so that they are rendered under the bots.
-    this._addBullets();
-
-    this._groups.bots = new BotGroup(this.game);
+    this._groups.playerBullets = new BulletGroup(this.game, 'Player Bullets');
+    this._groups.botBullets = new BulletGroup(this.game, 'Bot Bullets');
 
     this._addPlayerBounds(boundsColGroup);
 
@@ -1738,25 +2091,94 @@ Supercold.Game.prototype.create = function() {
     player.body.setCollisionGroup(this._colGroups.player);
     // The player collides with the bounds, the bots and the bullets.
     player.body.collides([boundsColGroup, this._colGroups.bots]);
-    player.body.collides(this._colGroups.botBullets, function lose(player, bullet) {
-        var overlay = this.add.existing(newOverlay(this.game)), duration = 1000;
+    player.body.collides([this._colGroups.playerBullets, this._colGroups.botBullets],
+        function lose(player, bullet) {
+            var duration = 1500, overlay;
 
-        overlay.name = 'lose screen overlay';
-        overlay.alpha = 0;
-        this.add.tween(overlay).to({
-            alpha: 1
-        }, duration, Phaser.Easing.Linear.None, AUTOSTART)
-            .onComplete.addOnce(function restart() {
-                this.time.events.add(Phaser.Timer.SECOND, this.restart, this);
-            }, this);
+            // The collision handler may be called more than once!
+            if (!player.sprite.alive) {
+                return;
+            }
 
-        player.sprite.kill();
-        bullet.sprite.kill();
-        // TODO: Add fancy effects.
-    }, this);
+            bullet.sprite.kill();
+            if (this._mutators.godmode) {
+                return;
+            }
+
+            overlay = this.add.existing(newOverlay(this.game));
+            overlay.name = 'lose screen overlay';
+            overlay.alpha = 0;
+            this.add.tween(overlay).to({
+                alpha: 1
+            }, duration, Phaser.Easing.Linear.None, AUTOSTART)
+                .onComplete.addOnce(function restart() {
+                    this.time.events.add(Phaser.Timer.SECOND * 1.5, this.restart, this);
+                    this.time.events.add(Phaser.Timer.SECOND * 1.5, hideTip, this);
+                }, this);
+
+            player.sprite.kill();
+            // TODO: Add fancy effects.
+            this.camera.shake(0.00086, 1200, true, Phaser.Camera.SHAKE_HORIZONTAL, false);
+            showTipRnd();
+        }, this);
 
     // The player is always in the center of the screen.
     this.camera.follow(player);
+
+    this._groups.bots = new BotGroup(this.game, this._spriteScale);
+    this._groups.bots.onChildInputDown.add(function hotswitch(bot, pointer) {
+        var properties = {
+            alpha: 0
+        }, duration = 400, playerTween, botTweeen;
+
+        if (DEBUG) log('Clicked on bot.');
+        // Hotswitch may not be ready yet or we may be in the middle of it.
+        if (this._nextHotSwitch > 0 || this._hotswitching) {
+            return;
+        }
+        // Don't use Ctrl + left lick since it is a simulated right click!
+        if ((pointer.leftButton.isDown && pointer.leftButton.shiftKey) ||
+                pointer.rightButton.isDown) {
+            if (DEBUG) log('Hotswitching...');
+            this._hotswitching = true;
+            // Fade out.
+            playerTween = this.add.tween(player).to(
+                properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
+            botTweeen = this.add.tween(bot).to(
+                properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
+            botTweeen.onComplete.addOnce(function swap() {
+                var temp;
+
+                // Make the camera move more smoothly for the hotswitch.
+                this.camera.follow(player, Phaser.Camera.FOLLOW_LOCKON, 0.2, 0.2);
+
+                temp = player.body.x;
+                player.body.x = bot.body.x;
+                bot.body.x = temp;
+                temp = player.body.y;
+                player.body.y = bot.body.y;
+                bot.body.y = temp;
+
+                this.camera.flash(0xEEEAE0, 250);
+
+                // Fade in.
+                properties.alpha = 1;
+                playerTween.to(properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
+                botTweeen.to(properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
+                this._nextHotSwitch = this._hotswitchTimeout;
+                botTweeen.onComplete.addOnce(function() {
+                    // Reset the camera to its default behaviour.
+                    this.camera.follow(player);
+                    this._hotswitching = false;
+                    if (DEBUG) log('Hotswitched.');
+                }, this);
+            }, this);
+        }
+    }, this);
+
+    this._huds.minimap = new Minimap(this.game);
+    this._huds.bulletBar = new BulletBar(this.game);
+    this._huds.hotswitchBar = new HotswitchBar(this.game);
 
     // Create controls.
     this._controls.cursors = this.input.keyboard.createCursorKeys();
@@ -1794,7 +2216,10 @@ Supercold.Game.prototype.create = function() {
     }
 
     // Decide when to spawn the first bot.
-    this._nextBotTime = this.rnd.realInRange(0.05, 0.25);
+    this._nextBotTime = this.rnd.realInRange(0.04, 0.06);
+    this._nextHotSwitch = this._hotswitchTimeout;
+    this._hotswitching = false;
+    this._fireRate = (this._mutators.fastgun) ? Supercold.fastFireRate : Supercold.fireRate;
 };
 
 
@@ -1810,23 +2235,26 @@ function moveForward(body, rotation, speed) {
     body.velocity.y = speed * Math.sin(rotation);
 }
 
-function getSpeed(playerAlive, playerMoved, playerRotated, speeds) {
+Supercold.Game.prototype._getSpeed = function(playerAlive, playerMoved, playerRotated, speeds) {
     if (!playerAlive) return speeds.slow;
     if (playerMoved) return speeds.normal;
+    if (this._mutators.fasttime) return speeds.slow;
     if (playerRotated) return speeds.slower;
     return speeds.frozen;
-}
+};
 
-function getBotSpeed(playerAlive, playerMoved, playerRotated) {
-    return getSpeed(playerAlive, playerMoved, playerRotated, Supercold.speeds.bot);
-}
+Supercold.Game.prototype._getBotSpeed = function(playerAlive, playerMoved, playerRotated) {
+    return this._getSpeed(playerAlive, playerMoved, playerRotated, Supercold.speeds.bot);
+};
 
-function getBulletSpeed(playerAlive, playerMoved, playerRotated) {
-    return getSpeed(playerAlive, playerMoved, playerRotated, Supercold.speeds.bullet);
-}
+Supercold.Game.prototype._getBulletSpeed = function(playerAlive, playerMoved, playerRotated) {
+    return this._getSpeed(playerAlive, playerMoved, playerRotated, Supercold.speeds.bullet);
+};
 
-function resetBullet(bullet, sprite) {
-    var offset = Supercold.player.radius - Math.round(Supercold.bullet.width/2);
+Supercold.Game.prototype._resetBullet = function(bullet, sprite) {
+    // Place the bullet in front of the sprite, so that it doesn't kill it instantly.
+    var offset = Supercold.player.radius*this._spriteScale +
+            Math.round(3/4 * Supercold.bullet.width);
 
     // Set the position of the bullet almost in front of the sprite.
     bullet.reset(
@@ -1835,38 +2263,41 @@ function resetBullet(bullet, sprite) {
     bullet.body.rotation = sprite.body.rotation;
     // Dispatch the onRevived signal after setting rotation.
     bullet.revive();
-}
+};
 
-function fireBullet(sprite, bulletGroup) {
-    var bullet = bulletGroup.getFirstExists(false);
-
-    if (bullet) {
-        resetBullet(bullet, sprite);
-        bullet.owner = sprite;
-        sprite.elapsedTime = 0;
-        return true;
-    }
-    return false;
-}
+Supercold.Game.prototype._fireBullet = function(bullet, sprite, fireRate) {
+    this._resetBullet(bullet, sprite);
+    bullet.owner = sprite;
+    sprite.remainingTime = fireRate;
+};
 
 Supercold.Game.prototype._firePlayerBullet = function() {
+    var player = this._sprites.player;
+
     // Not ready to fire yet.
-    if (this._sprites.player.elapsedTime < Supercold.fireRate)
+    if (player.remainingTime > 0)
         return false;
-    return fireBullet(this._sprites.player, this._groups.playerBullets);
+    if (DEBUG) log('Player bullet exists: ' + (this._groups.playerBullets.getFirstExists(false) !== null));
+    this._fireBullet(
+        this._groups.playerBullets.getFirstExists(false) || this._createPlayerBullet(),
+        player, this._fireRate);
+    return true;
 };
 
 Supercold.Game.prototype._fireBotBullet = function(bot) {
     // Not ready to fire yet.
-    if (bot.elapsedTime < Supercold.fireRate)
+    if (bot.remainingTime > 0)
         return;
     // Wait sometimes before firing to make things a bit more unpredictable.
     if (this.rnd.frac() <= 1/3) {
-        bot.elapsedTime = this.rnd.between(
+        bot.remainingTime = this.rnd.between(
             0, Math.max(Supercold.fireRate * (1 - this.level/100), 0));
         return;
     }
-    fireBullet(bot, this._groups.botBullets);
+    if (DEBUG) log('Bot bullet exists: ' + (this._groups.botBullets.getFirstExists(false) !== null));
+    this._fireBullet(
+        this._groups.botBullets.getFirstExists(false) || this._createBotBullet(),
+        bot, Supercold.fireRate);
 };
 
 Supercold.Game.prototype._advanceBullet = function(bullet, speed) {
@@ -1875,9 +2306,9 @@ Supercold.Game.prototype._advanceBullet = function(bullet, speed) {
 
 Supercold.Game.prototype._advanceBot = function(
         bot, speed, playerFired, elapsedTime) {
-    var player = this._sprites.player, range = Math.PI/2.2, direction, angleDiff;
+    var player = this._sprites.player, range = Math.PI/2.25, direction, angleDiff;
 
-    bot.elapsedTime += elapsedTime;
+    bot.remainingTime -= elapsedTime;
 
     // Even though we use P2 physics, this function should work just fine.
     bot.body.rotation = this.physics.arcade.angleBetween(bot, player);
@@ -1909,10 +2340,10 @@ Supercold.Game.prototype._advanceBot = function(
             this.math.normalizeAngle(bot.body.rotation);
         if (!(angleDiff < range && angleDiff > -range))
             return;
-        // Dodge sometimes.
-        if (this.rnd.frac() <= 1/3 + (2/3 * this.level/100)) {
+        // Dodge sometimes (chance in range [1/3,3/4]).
+        if (this.rnd.frac() <= 1/3 + Math.min(5/12, 5/12 * this.level/100)) {
             bot.dodging = true;
-            bot.duration = 0.5;   // secs
+            bot.duration = 0.25 + 0.005*this.level;   // secs
             bot.direction = (this.rnd.between(0, 1)) ? 'left' : 'right';
         }
     }
@@ -1966,11 +2397,13 @@ Supercold.Game.prototype.update = function() {
         horVec.x = 1;
     }
     playerMoved = (verVec.y !== 0 || horVec.x !== 0);
-    playerRotated = this._rotatePlayer();
+    playerRotated = this._rotatePlayer() && !this._mutators.freelook;
 
     if (player.alive) {
         // Process firing controls.
-        if (this.input.activePointer.leftButton.isDown || fireKey.isDown) {
+        if ((this.input.activePointer.leftButton.isDown &&
+                    !this.input.activePointer.leftButton.shiftKey) ||
+                fireKey.isDown) {
             playerFired = this._firePlayerBullet();
         }
 
@@ -1982,13 +2415,28 @@ Supercold.Game.prototype.update = function() {
         }
     }
 
-    bulletSpeed = getBulletSpeed(player.alive, playerMoved, playerRotated);
-    botSpeed = getBotSpeed(player.alive, playerMoved, playerRotated);
+    bulletSpeed = this._getBulletSpeed(player.alive, playerMoved, playerRotated);
+    botSpeed = this._getBotSpeed(player.alive, playerMoved, playerRotated);
 
     // When time slows down, distort the elapsed time proportionally.
     elapsedTime = this.time.physicsElapsed *
         (bulletSpeed / Supercold.speeds.bullet.normal);
-    player.elapsedTime += elapsedTime;
+    player.remainingTime -= elapsedTime;
+
+    if (!this._hotswitching) {
+        this._nextHotSwitch -= elapsedTime;
+    }
+    // Check if there are any more bots to spawn.
+    if (this._totalBotCount > 0) {
+        this._nextBotTime -= elapsedTime;
+        if (this._nextBotTime <= 0) {
+            --this._totalBotCount;
+            this._spawnBot();
+            this._nextBotTime = this.rnd.realInRange(
+                Math.max(1.4 - 0.01*this.level, 0),
+                Math.max(2.8 - 0.02*this.level, 0));
+        }
+    }
 
     // Update bots.
     this._groups.bots.forEachAlive(
@@ -1998,18 +2446,14 @@ Supercold.Game.prototype.update = function() {
         this._advanceBullet, this, bulletSpeed);
     this._groups.botBullets.forEachAlive(
         this._advanceBullet, this, bulletSpeed);
-    this._trailManager.updateTrails(elapsedTime);
-
-    // Check if there are any more bots to spawn.
-    if (this._totalBotCount > 0) {
-        this._nextBotTime -= elapsedTime;
-        if (this._nextBotTime <= 0) {
-            --this._totalBotCount;
-            this._spawnBot();
-            this._nextBotTime = this.rnd.realInRange(
-                Math.max(1 - 0.01*this.level, 0),
-                Math.max(3 - 0.02*this.level, 0));
-        }
+    this._bulletTrailPainter.updateTrails(elapsedTime);
+    // Update the minimap.
+    this._huds.minimap.update(player, this._groups.bots);
+    if (player.alive) {
+        this._huds.bulletBar.update(
+            Math.min(1, 1 - player.remainingTime / this._fireRate));
+        this._huds.hotswitchBar.update(
+            Math.min(1, 1 - this._nextHotSwitch/this._hotswitchTimeout));
     }
 };
 
@@ -2026,7 +2470,6 @@ Supercold.Game.prototype.shutdown = function() {
      * shutdown method if we wish to free-up the resources they use.
      * Note that BitmapData objects added to the cache will be destroyed for us.
      */
-     this._trailManager.destroy();
 };
 
 
@@ -2035,25 +2478,66 @@ Supercold.Game.prototype.shutdown = function() {
  */
 Supercold.Game.prototype.render = function() {
     if (DEBUG) {
-        this.game.debug.spriteInfo(this._sprites.player, DEBUG_POSX, 32);
-        this.game.debug.cameraInfo(this.camera, DEBUG_POSX, 128);
-        this.game.debug.inputInfo(DEBUG_POSX, 128+64+32);
-        this.game.debug.pointer(this.input.activePointer);
-        this.game.debug.text('DEBUG: ' + DEBUG, DEBUG_POSX, this.game.height-16);
+        this.showDebugInfo(this._sprites.player);
     }
 };
 
 /****************************** Setup and Expose ******************************/
 
+function emptyClassName(selector) {
+    Array.prototype.forEach.call(document.querySelectorAll(selector), function(el) {
+        el.className = '';
+    });
+}
+
 Supercold.play = function play(parent, config) {
     // Tell Phaser to cover the entire window and use the best renderer.
-    // NOTE: Something is wrong with WebGL, so we will use canvas for now!
-    var game = new Phaser.Game('100', '100', Phaser.CANVAS, parent);
+    var game = new Phaser.Game('100', '100', Phaser.AUTO, parent),
+        unlockLevels = [10, 20, 30, 40, 50, 75, 100],
+        mutators, mutator, level, i;
 
     /**
      * The single instance of data storage for our game.
      */
     Supercold.storage = new Supercold.GameStorageManager();
+
+    mutators = Supercold.storage.loadMutators();
+    if (mutators === null) {
+        Supercold.storage.saveMutators({
+            freelook: false,
+            fasttime: false,
+            fastgun: false,
+            bighead: false,
+            chibi: false,
+            superhotswitch: false,
+            lmtdbullets: false,
+            doge: false,
+            godmode: false
+        });
+    }
+    for (mutator in mutators) {
+        if (mutators.hasOwnProperty(mutator)) {
+            document.getElementById(mutator).checked = mutators[mutator];
+        }
+    }
+
+    level = Supercold.storage.loadLevel();
+    for (i = 0; i < unlockLevels.length; ++i) {
+        if (unlockLevels[i] <= level) {
+            emptyClassName('.locked' + unlockLevels[i]);
+        } else {
+            break;
+        }
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll('#mutators input'), function(input) {
+        input.addEventListener('change', function(event) {
+            var mutators = Supercold.storage.loadMutators();
+
+            mutators[this.id] = this.checked;
+            Supercold.storage.saveMutators(mutators);
+        }, false);
+    });
 
     // Global per-instance options. Use a namespace to avoid name clashes.
     game.supercold = Phaser.Utils.extend({

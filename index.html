@@ -29,187 +29,10 @@
 
         <title>SUPERCOLD</title>
 
-        <style type="text/css">
-            * {
-                margin: 0;
-                padding: 0;
-            }
-            html, body, #supercold-canvas {
-                width: 100%;
-                height: 100%;
-                overflow: hidden;               /* no scrollbar */
-            }
-            body {
-                font-family: Helvetica, Arial;
-                color: rgb(230, 251, 255);
-                text-shadow: 0px -1px 8px rgba(230, 251, 255, 1),
-                             0px  1px 8px rgba(230, 251, 255, 1),
-                            -1px  0px 4px rgba(245, 4, 3, 0.275),
-                             1px  0px 4px rgba(220, 250, 255, 1);
-                background-color: rgb(10, 10, 10);
-            }
-            a {
-                color: rgb(235, 251, 255);
-                text-decoration: none;
-            }
-            button {
-                margin: 4px 0px;
-                padding: 3px 40px;
+        <link rel="icon" href="/favicon.png" type="image/png" sizes="32x32">
+        <link rel="icon" href="favicon.ico" type="image/x-icon">
 
-                font-size: 1.15em;
-                color: rgb(235, 251, 255);
-                text-shadow: -1px 0px 4px rgb(230, 251, 255),
-                              1px 0px 4px rgb(230, 251, 255);
-
-                background-color: rgb(34, 34, 34);
-                background: -webkit-linear-gradient(top, rgb(70, 70, 70), rgb(34, 34, 34));
-                background:    -moz-linear-gradient(top, rgb(70, 70, 70), rgb(34, 34, 34));
-                background:     -ms-linear-gradient(top, rgb(70, 70, 70), rgb(34, 34, 34));
-                background:      -o-linear-gradient(top, rgb(70, 70, 70), rgb(34, 34, 34));
-                background:   linear-gradient(to bottom, rgb(70, 70, 70), rgb(34, 34, 34));
-
-                border: 2px solid rgb(34, 34, 34);
-                border-radius: 6px;
-
-                -webkit-box-shadow: 0px 0px 5px 1px rgb(70, 70, 70);
-                        box-shadow: 0px 0px 5px 1px rgb(70, 70, 70);
-
-                -webkit-transition-duration: 0.2s;
-                   -moz-transition-duration: 0.2s;
-                     -o-transition-duration: 0.2s;
-                        transition-duration: 0.2s;
-            }
-            button:hover {
-                color: rgb(34, 34, 34);
-                text-shadow: -1px 0px 2px rgb(34, 34, 34),
-                              1px 0px 2px rgb(34, 34, 34);
-
-                background-color: rgb(245, 4, 3);
-                background: -webkit-linear-gradient(top, rgb(245, 30, 30), rgb(245, 4, 3));
-                background:    -moz-linear-gradient(top, rgb(245, 30, 30), rgb(245, 4, 3));
-                background:     -ms-linear-gradient(top, rgb(245, 30, 30), rgb(245, 4, 3));
-                background:      -o-linear-gradient(top, rgb(245, 30, 30), rgb(245, 4, 3));
-                background:   linear-gradient(to bottom, rgb(245, 30, 30), rgb(245, 4, 3));
-
-                border: 2px solid #f44336;
-
-                -webkit-box-shadow: 0px 0px 5px 1px rgb(245, 4, 3);
-                        box-shadow: 0px 0px 5px 1px rgb(245, 4, 3);
-            }
-            #supercold {
-                font-size: 1.75em;
-                font-weight: lighter;
-
-                color: rgb(235, 251, 255);
-                text-shadow: 0px -1px 6px rgba(220, 251, 255, 1),
-                             0px  1px 6px rgba(220, 251, 255, 1),
-                            -1px  0px 4px rgba(245, 4, 3, 0.225),
-                             1px  0px 4px rgba(220, 250, 255, 1);
-            }
-            #supercold span {
-                text-shadow: 0px  0px 6px rgba(220, 251, 255, 1),
-                             0px -1px 6px rgba(220, 251, 255, 1),
-                             0px  1px 6px rgba(220, 251, 255, 1),
-                            -1px  0px 4px rgba(245, 4, 3, 0.725),
-                             1px  0px 4px rgba(220, 251, 255, 1);
-            }
-            #superhot {
-                font-size: 1.4em;
-                vertical-align: middle;
-
-                border-bottom: 1px dotted rgba(245, 4, 3, 0.4);
-
-                color: rgb(245, 4, 3);
-                text-shadow: -1px 1px 6px rgb(245, 4, 3),
-                             1px -1px 6px rgb(245, 4, 3);
-            }
-            #superhot span {
-                text-shadow: 0px 0px 4px rgb(245, 4, 3),
-                            -1px 1px 4px rgb(245, 4, 3),
-                            1px -1px 4px rgb(245, 4, 3);
-            }
-            #supercold, #superhot {
-                font-weight: normal;
-            }
-            #supercold span, #superhot span {
-                font-weight: bold;
-            }
-            #instructions .superhotkey {
-                color: rgb(245, 4, 3);
-                text-shadow: 0px  0px 3px rgb(245, 4, 3),
-                            -1px  1px 5px rgb(245, 4, 3),
-                             1px -1px 5px rgb(245, 4, 3);
-            }
-            #center div {
-                margin: 4px 0px;
-            }
-            #center {
-                position: fixed;
-                left: 50%;
-                top: 50%;
-                -webkit-transform: translate(-50%, -50%);
-                   -moz-transform: translate(-50%, -50%);
-                    -ms-transform: translate(-50%, -50%);
-                     -o-transform: translate(-50%, -50%);
-                        transform: translate(-50%, -50%);
-
-                text-align: center;
-                /* Set a min-width for mobile devices. */
-                min-width: 280px;
-                padding: 16px 34px 10px;
-
-                background-color: rgba(40, 40, 40, 0.925);
-                background: -webkit-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
-                background:    -moz-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
-                background:     -ms-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
-                background:      -o-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
-                background:         radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
-
-                border-radius: 8px;
-
-                -webkit-box-shadow: 0px 0px 6px 1px rgb(24, 24, 24);
-                        box-shadow: 0px 0px 6px 1px rgb(24, 24, 24);
-            }
-            #more {
-                position: fixed;
-                top: 0;
-                left: 0;
-                padding: 4px 8px;
-
-                background-color: rgba(40, 40, 40, 0.75);
-                border-bottom-right-radius: 6px;
-
-                -webkit-box-shadow: 0px 0px 6px 1px rgb(128, 128, 128);
-                        box-shadow: 0px 0px 6px 1px rgb(128, 128, 128);
-            }
-            #bottom {
-                position: fixed;
-                bottom: 0;
-                right: 0;
-                padding: 4px 8px;
-
-                font-size: 0.96em;
-                background-color: rgba(40, 40, 40, 0.75);
-                border-top-left-radius: 6px;
-
-                -webkit-box-shadow: 0px 0px 5px 1px rgb(128, 128, 128);
-                        box-shadow: 0px 0px 5px 1px rgb(128, 128, 128);
-            }
-            #top {
-                position: fixed;
-                top: 4px;
-                right: 4px;
-            }
-            #top > div {
-                vertical-align: top;
-                /* Override default FB display style for mobile. */
-                display: inline-block;
-            }
-            #top > iframe {
-                /* Use this instead of frameborder=0. */
-                border: none;
-            }
-        </style>
+        <link rel="stylesheet" type="text/css" href="css/supercold.css">
 
         <!-- ArrayBuffer and DataView support for IE9, required by P2 Physics. -->
         <script type="text/javascript" src="js/dataview-polyfill.js"></script>
@@ -235,7 +58,7 @@
                 var js, fjs = d.getElementsByTagName(s)[0];
                 if (d.getElementById(id)) return;
                 js = d.createElement(s); js.id = id;
-                js.src = "//connect.facebook.net/en_US/sdk.js#xfbml=1&version=v2.7";
+                js.src = "//connect.facebook.net/en_US/sdk.js#xfbml=1&version=v2.8";
                 fjs.parentNode.insertBefore(js, fjs);
             }(document, 'script', 'facebook-jssdk'));
         </script>
@@ -247,35 +70,128 @@
             <div id="more">
                 <a href="https://import-this.github.io/">More games</a>
             </div>
-            <div id="top">
+            <div id="center" class="no-select no-touch-action">
+                <div id="panes">
+                    <div class="pane">
+                        <h2 id="supercold">SUPER<span>COLD</span></h2>
+                        <div id="description">
+                            A 2D game with the clever mechanics of
+                            <strong>
+                                <a id="superhot" href="http://superhotgame.com/">SUPER<span>HOT</span></a>
+                            </strong>
+                        </div>
+                        <div id="instructions">
+                            <strong class="superhotkey">WASD</strong> to move.
+                            <strong class="superhotkey">Left Click</strong> anywhere to fire.<br />
+                            <strong class="superhotkey">Left Click + Shift</strong> on a bot to hotswitch.<br />
+                            <strong>ESC</strong> to quit.
+                            <strong>Backspace</strong> to restart.
+                        </div>
+                        <div>
+                            <button id="start" name="start" type="button">Start</button>
+                        </div>
+                    </div>
+                    <div id="mutator-pane" class="pane">
+                        <h3>Mutators</h3>
+                        <div>
+                            (Reach higher levels to unlock more)
+                        </div>
+                        <div id="mutators">
+                            <div>
+                                <input id="freelook" type="checkbox">
+                                <label for="freelook"><span></span>freelook - Looking around doesn't waste time.</label>
+                            </div>
+                            <div>
+                                <input id="fasttime" type="checkbox">
+                                <label for="fasttime"><span></span>fasttime - Time flows faster.</label>
+                            </div>
+                            <div>
+                                <input id="fastgun" type="checkbox">
+                                <label for="fastgun" class="locked50"><span></span>fastgun - You can shoot faster.</label>
+                            </div>
+                            <div>
+                                <input id="superhotswitch" type="checkbox">
+                                <label for="superhotswitch" class="locked75"><span></span>superhotswitch - Hotswitch recharges faster.</label>
+                            </div>
+                            <div style="display:none">
+                                <input id="lmtdbullets" type="checkbox">
+                                <label for="lmtdbullets" class="locked30"><span></span>lmtdbullets - You have limited bullets.</label>
+                            </div>
+                            <div>
+                                <input id="bighead" type="checkbox">
+                                <label for="bighead" class="locked20"><span></span>bighead - Bigger bots.</label>
+                            </div>
+                            <div>
+                                <input id="chibi" type="checkbox">
+                                <label for="chibi" class="locked10"><span></span>chibi - Smaller bots.</label>
+                            </div>
+                            <div style="display:none">
+                                <input id="doge" type="checkbox">
+                                <label for="doge" class="locked40"><span></span>doge - MEMES! VERY SUPER! SUCH HOT! WOW!</label>
+                            </div>
+                            <div>
+                                <input id="godmode" type="checkbox">
+                                <label for="godmode" class="locked100"><span></span>godmode - You are invincible!</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="top" class="social">
                 <!-- Facebook Like and Share Buttons -->
-                <div class="fb-like" data-href="https://www.facebook.com/supercoldgame/" data-layout="button" data-action="like" data-size="small" data-show-faces="false" data-share="true"></div>
+                <div class="fb-like" data-href="https://www.facebook.com/supercoldgame/" data-layout="button" data-action="like" data-size="small" data-show-faces="false" data-share="false"></div>
+                <div class="fb-share-button" data-href="https://www.facebook.com/supercoldgame/" data-layout="button" data-size="small" data-mobile-iframe="true"><a class="fb-xfbml-parse-ignore" target="_blank" href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fwww.facebook.com%2Fsupercoldgame%2F&amp;src=sdkpreparse">Share</a></div>
+                <!-- Twitter Buttons -->
+                <a href="https://twitter.com/share" class="twitter-share-button" data-text="SUPERCOLD! The 2D web game where time moves when you move!" data-url="https://git.io/supercold" data-via="importthat" data-hashtags="SUPERCOLD" data-show-count="false">Tweet</a><script async src="//platform.twitter.com/widgets.js" charset="utf-8"></script>
+                <a href="https://twitter.com/importthat" class="twitter-follow-button" data-show-screen-name="false" data-show-count="false">Follow @importthat</a><script async src="//platform.twitter.com/widgets.js" charset="utf-8"></script>
                 <!-- GitHub Star Button (https://ghbtns.com/ with modifications) -->
                 <iframe src="https://ghbtns.com/github-btn.html?user=import-this&repo=supercold&type=star" scrolling="0" width="50" height="20"></iframe>
-            </div>
-            <div id="center">
-                <h2 id="supercold">SUPER<span>COLD</span></h2>
-                <div id="description">
-                    A simple 2D game with the clever mechanics of<br />
-                    <strong>
-                        <a id="superhot" href="http://superhotgame.com/">SUPER<span>HOT</span></a>
-                    </strong>
-                </div>
-                <div id="instructions">
-                    <strong class="superhotkey">WASD</strong> to move.
-                    <strong class="superhotkey">Left Click</strong> to fire.<br />
-                    <strong>ESC</strong> to quit.
-                    <strong>Backspace</strong> to restart.
-                </div>
-                <div>
-                    <button id="start" name="start" type="button">Start</button>
-                </div>
             </div>
             <div id="bottom">
                 <a href="about.html" title="About the game">About</a> |
                 <a href="terms.html" title="About usage rules">Terms of Use</a> |
                 <a href="privacy.html" title="About collected info">Privacy Policy</a>
             </div>
+        </div>
+        <div id="tips" class="no-select no-touch-action">
+            <div class="tip">
+                Don't rush it!
+            </div>
+            <div class="tip">
+                You can destroy enemy bullets with your bullets!
+            </div>
+            <div class="tip">
+                Bots can kill each other if you make them get in each others way.
+            </div>
+            <div class="tip">
+                Sometimes bots try to dodge your bullets.
+            </div>
+            <div class="tip">
+                Time moves slightly faster when you rotate.
+            </div>
+            <div class="tip">
+                Be careful not to trap yourself in the corners.
+            </div>
+            <div class="tip">
+                Try out some of the several mutators.
+            </div>
+            <div class="tip">
+                Reach level 100 for a fun mutator.
+            </div>
+            <div class="tip">
+                Hotswitching is powerful. Use it intelligently.
+            </div>
+            <div class="tip">
+                You can also fire by pressing the spacebar.
+            </div>
+            <div class="tip">
+                You can also hotswitch by right clicking on a bot,<br/>
+                but it may not work correctly in your browser.<br/>
+                Try at your own risk.
+            </div>
+        </div>
+        <div id="hint">
+            press 'BACKSPACE' to restart instantly
         </div>
 
         <script type="text/javascript">
@@ -287,15 +203,32 @@
                     document.getElementById('menu').style.display = 'block';
                 }
 
+                // As of February 2017, Chrome, Opera, FF and IE (at least on Windows)
+                // trigger the default action for the contextmenu event, despite Phaser.
+                // Chrome also demonstrates the following behaviour:
+                // https://github.com/photonstorm/phaser/issues/2286
+                document.getElementById('supercold-canvas')
+                    .addEventListener('contextmenu', function(event) {
+                        event.preventDefault();
+                    }, false);
+
                 // Let the game begin!
                 var game = Supercold.play('supercold-canvas', {
                     onMainMenuOpen: showMenu
                 });
 
-                document.getElementById('start').addEventListener('click', function(event) {
-                    hideMenu();
-                    game.state.start('Intro');
-                }, false);
+                document.getElementById('start')
+                    .addEventListener('click', function(event) {
+                        hideMenu();
+                        game.state.start('Intro');
+                    }, false);
+
+                Array.prototype.forEach.call(document.querySelectorAll('#mutators label'), function(input) {
+                    // Prevent text selection on successive clicks.
+                    input.addEventListener('mousedown', function onMousedown(event) {
+                        event.preventDefault();     // but let the event propagate!
+                    }, false);
+                });
             }(document));
         </script>
 
