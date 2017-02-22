@@ -332,7 +332,7 @@ var Supercold = {
             darkColor: 'rgb(64, 64, 64)'
         },
         overlay: {
-            lightColor: 'rgba(32, 32, 32, 0.375)',
+            lightColor: 'rgba(32, 32, 32, 0.475)',
             darkColor: 'rgba(0, 0, 0, 0.675)'
         },
         player: {
@@ -715,10 +715,11 @@ function newOverlay(game, color) {
 /**
  * An object that displays messages to the player.
  *
- * @param {Array.<string>} text - The word/phrase to display.
+ * @param {Array.<string>} text - The message (word/phrase) to display.
  * @param {object} [options] - A customization object.
  * @param {number} [options.initDelay=0] - How long to wait before starting.
  * @param {number} [options.nextDelay=550] - How long to wait before showing the next word.
+ * @param {number} [options.finalDelay=options.nextDelay] - How long to wait before showing the message again.
  * @param {number} [options.duration=450] - How long the animation for each word will last.
  * @param {number} [options.flashOnDuration=25] - How long it will take to turn the flash on.
  * @param {number} [options.flashOffDuration=400] - How long it will take to turn the flash off.
@@ -730,6 +731,9 @@ function newOverlay(game, color) {
  */
 function Announcer(game, text, options) {
     this.options = Phaser.Utils.extend({}, Announcer.defaults, options);
+    if (this.options.finalDelay === undefined) {
+        this.options.finalDelay = this.options.nextDelay;
+    }
 
     if (this.options.overlay) {
         this.overlay = game.add.existing(newOverlay(game, this.options.overlayColor));
@@ -756,6 +760,7 @@ function Announcer(game, text, options) {
 Announcer.defaults = {
     initDelay: 0,
     nextDelay: 550,
+    //finalDelay: <nextDelay>,
     duration: 450,
     flashOnDuration: 25,
     flashOffDuration: 400,
@@ -788,19 +793,27 @@ Announcer.prototype._flashCamera0 = function() {
         .onComplete.addOnce(this._flashCamera1, this);
 };
 
-Announcer.prototype._next2 = function() {
+Announcer.prototype._next = function() {
     this.textGroup.cursor.kill();
     this.textGroup.next();
-    if (this.options.repeat || this.textGroup.cursorIndex !== 0) {
-        this._announce();
+    this._announce();
+};
+
+Announcer.prototype._repeat = function() {
+    if (this.options.repeat) {
+        this._next();
     } else {
         this._destroy();
         this.options.onComplete.call(this);
     }
 };
 
-Announcer.prototype._next = function() {
-    this.time.events.add(this.options.nextDelay, this._next2, this);
+Announcer.prototype._announceNext = function() {
+    if (this.textGroup.cursorIndex < this.textGroup.length - 1) {
+        this.time.events.add(this.options.nextDelay, this._next, this);
+    } else {
+        this.time.events.add(this.options.finalDelay, this._repeat, this);
+    }
 };
 
 Announcer.prototype._announce = function() {
@@ -818,7 +831,7 @@ Announcer.prototype._announce = function() {
         y: '-' + diff,
     }, this.options.duration, Phaser.Easing.Quadratic.Out);
     tween.onStart.addOnce(this._flashCamera0, this);
-    tween.onComplete.addOnce(this._next, this);
+    tween.onComplete.addOnce(this._announceNext, this);
     tween.start();
 };
 
@@ -1247,7 +1260,19 @@ Supercold.Preloader.prototype._makeOverlayBitmaps = function() {
 };
 
 
-Supercold.Preloader.prototype.preload = function() {};
+Supercold.Preloader.prototype.preload = function() {
+    if (DEBUG) {
+        this.load.onFileComplete.add(function(progress, key, success, totalLF, totalF) {
+            log(((success) ? 'Loaded ' : 'Failed to load ') + key);
+            log('Progress: ' + progress + ', Total loaded files: ' + totalLF +
+                ', Total files: ' + totalF);
+        }, this);
+        this.load.onLoadComplete.add(function() {
+            log('Asset loading completed');
+        }, this);
+    }
+    this.load.audio('superhot', ['audio/superhot.mp3', 'audio/superhot.ogg']);
+};
 
 Supercold.Preloader.prototype.create = function() {
     if (DEBUG) log('Creating Preloader state...');
@@ -1265,7 +1290,7 @@ Supercold.Preloader.prototype.create = function() {
 };
 
 Supercold.Preloader.prototype.update = function() {
-    // No actual wait for asset loading, so go to the next state immediately.
+    // No actual need to wait for asset loading.
     this.state.start('MainMenu');
 };
 
@@ -1858,6 +1883,8 @@ Supercold.Game = function(game) {
     this._nextHotSwitch = 0;
     this._hotswitching = false;
 
+    this._superhotFx = null;
+
     // Internal cached objects.
     this._cached = {
         verVec: {x: 0, y: 0},
@@ -1996,14 +2023,27 @@ Supercold.Game.prototype._superhot = function() {
     this.time.events.add(DELAY, function superhot() {
         var superhot = Supercold.texts.SUPERHOT.split(' '),
             announcer = new Announcer(this.game, superhot, {
+                nextDelay: 650,
+                finalDelay: 400,
                 repeat: true,
                 overlay: true,
                 overlayColor: 'light'
             }),
-            duration = announcer.options.nextDelay + announcer.options.duration,
-            delay = 3 * (superhot.length * duration);
+            superDuration = announcer.options.nextDelay + announcer.options.duration,
+            hotDuration = announcer.options.finalDelay + announcer.options.duration,
+            duration = superDuration + hotDuration,
+            times = 4, delay = times * duration, i;
 
+        for (i = 0; i < times; ++i) {
+            this.time.events.add(i*duration, function saySuper() {
+                this._superhotFx.play('super');
+            }, this);
+            this.time.events.add(i*duration + superDuration, function sayHot() {
+                this._superhotFx.play('hot');
+            }, this);
+        }
         announcer.announce();
+
         this.time.events.add(delay, function nextLevel() {
             this.state.start('Game', CLEAR_WORLD, CLEAR_CACHE, {
                 level: newLevel
@@ -2063,6 +2103,10 @@ Supercold.Game.prototype.create = function() {
     this.setScaling();
 
     this.addBackground();
+
+    this._superhotFx = this.add.audio('superhot');
+    this._superhotFx.addMarker('super', 0, 0.825);
+    this._superhotFx.addMarker('hot', 0.825, 0.775);
 
     // Collision groups for the player, the bots, the bullets and the bounds.
     this._colGroups.player = this.physics.p2.createCollisionGroup();

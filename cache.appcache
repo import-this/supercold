@@ -1,6 +1,6 @@
 CACHE MANIFEST
 # Update the next line after a change is made.
-# 2017-02-20:v1.1.0
+# 2017-02-22:v1.1.0
 
 # Do NOT use backslashes before relative paths.
 
@@ -21,6 +21,10 @@ js/supercold.js
 # Images
 favicon.ico
 favicon.png
+
+# Audio
+audio/superhot.mp3
+audio/superhot.ogg
 
 # Resources that require the user to be online (everything not listed above).
 NETWORK:
