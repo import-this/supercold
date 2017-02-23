@@ -2150,7 +2150,7 @@ Supercold.Game.prototype.create = function() {
             }
 
             bullet.sprite.kill();
-            if (this._mutators.godmode) {
+            if (this.superhot || this._mutators.godmode) {
                 return;
             }
 
