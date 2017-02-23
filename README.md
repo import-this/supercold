@@ -1,7 +1,7 @@
 SUPERCOLD
 =========
 
-A simple and crude 2D HTML5 game with the clever mechanics of [SUPERHOT](http://superhotgame.com/).
+A simple 2D HTML5 game with the clever mechanics of [SUPERHOT](http://superhotgame.com/).
 
 [You can play it here!](https://import-this.github.io/supercold/)
 
