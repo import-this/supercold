@@ -184,7 +184,7 @@ GameStorageManager.prototype.loadRndState = function() {
  * @const
  */
 var CLEAR_WORLD = true,
-    CLEAR_CACHE = false,
+    CLEAR_CACHE = true,
     /**
      * Use the more expensive but powerful P2 physics system. The others don't cut it.
      * Note: When a game object is given a P2 body, it has its anchor set to 0.5.
@@ -1358,7 +1358,7 @@ Supercold.Intro.prototype.create = function() {
         overlay: true,
         onComplete: (function startLevel() {
             // Start at the last level that the player was in or the first one.
-            this.state.start('Game', CLEAR_WORLD, CLEAR_CACHE, {
+            this.state.start('Game', CLEAR_WORLD, !CLEAR_CACHE, {
                 level: Supercold.storage.loadLevel()
             });
         }).bind(this)
@@ -2045,7 +2045,7 @@ Supercold.Game.prototype._superhot = function() {
         announcer.announce();
 
         this.time.events.add(delay, function nextLevel() {
-            this.state.start('Game', CLEAR_WORLD, CLEAR_CACHE, {
+            this.state.start('Game', CLEAR_WORLD, !CLEAR_CACHE, {
                 level: newLevel
             });
         }, this);
@@ -2060,18 +2060,21 @@ Supercold.Game.prototype._botKillHandler = function(bot, bullet, _botS, _bulletS
     }
 };
 
-Supercold.Game.prototype._spawnBot = function() {
+/**
+ * Spawns the next bot.
+ * @param {boolean} [closer=false] - If true, makes the bot appear closer to the player.
+ */
+Supercold.Game.prototype._spawnBot = function(closer) {
     var view = this.camera.view, colGroups = this._colGroups,
-        offset = (Supercold.player.radius * this._spriteScale) * 2 * 1.2,
-        baseX, baseY, bot;
+        scale = (closer) ? 0.75 : 1.2,
+        offset = (Supercold.player.radius * this._spriteScale) * 2 * scale,
+        baseX = ((this.rnd.between(0, 1)) ? view.left : view.right) * scale,
+        baseY = ((this.rnd.between(0, 1)) ? view.top : view.bottom) * scale,
+        bot = this._groups.bots.getFirstDead(true,
+            this.rnd.between(baseX, baseX + offset),
+            this.rnd.between(baseY, baseY + offset));
 
-    baseX = ((this.rnd.between(0, 1)) ? view.left : view.right) * 1.2;
-    baseY = ((this.rnd.between(0, 1)) ? view.top : view.bottom) * 1.2;
-
-    bot = this._groups.bots.getFirstDead(
-        true,
-        this.rnd.between(baseX, baseX + offset),
-        this.rnd.between(baseY, baseY + offset));
+    --this._totalBotCount;
     bot.alpha = 0.1;
     this.add.tween(bot).to({
         alpha: 1
@@ -2086,7 +2089,7 @@ Supercold.Game.prototype._spawnBot = function() {
 
 Supercold.Game.prototype.restart = function restart() {
     hideTip();
-    this.state.restart(CLEAR_WORLD, CLEAR_CACHE, {level: this.level});
+    this.state.restart(CLEAR_WORLD, !CLEAR_CACHE, {level: this.level});
 };
 
 Supercold.Game.prototype.quit = function quit() {
@@ -2242,7 +2245,7 @@ Supercold.Game.prototype.create = function() {
     if (this.level === 1) {
         // If the player just started playing, explain the game mechanics.
         new Announcer(this.game, Supercold.texts.MECHANICS.split(' '), {
-            initDelay: 800,
+            initDelay: 750,
             duration: 250,
             nextDelay: 250,
             flashTint: 0x4A4A4A,
@@ -2251,16 +2254,21 @@ Supercold.Game.prototype.create = function() {
     } else {
         // Otherwise, simply tell in which level they are in.
         new Announcer(this.game, [Supercold.texts.LEVEL + ' ' + this.level], {
-            initDelay: 800,
+            initDelay: 700,
             duration: 500,
-            nextDelay: 250,
+            finalDelay: 250,
             flashTint: 0x4A4A4A,
             flashOffDuration: 800
         }).announce();
     }
 
-    // Decide when to spawn the first bot.
-    this._nextBotTime = this.rnd.realInRange(0.04, 0.06);
+    // Spawn the first bot.
+    // Use a timer so that it won't spawn in this method (messes with camera).
+    this.time.events.add(1, function() {
+        this._spawnBot(true);
+    }, this);
+    // Decide when to spawn the next bot.
+    this._nextBotTime = this.rnd.realInRange(0.06, 0.12);
     this._nextHotSwitch = this._hotswitchTimeout;
     this._hotswitching = false;
     this._fireRate = (this._mutators.fastgun) ? Supercold.fastFireRate : Supercold.fireRate;
@@ -2360,7 +2368,7 @@ Supercold.Game.prototype._advanceBot = function(
 
     // Only shoot if the bot is somewhat close to the player.
     if (this.physics.arcade.distanceBetween(bot, player) <
-            Math.min(this.game.width, this.game.height)) {
+            this.math.average(this.game.width, this.game.height)) {
         this._fireBotBullet(bot);
     }
 
@@ -2474,7 +2482,6 @@ Supercold.Game.prototype.update = function() {
     if (this._totalBotCount > 0) {
         this._nextBotTime -= elapsedTime;
         if (this._nextBotTime <= 0) {
-            --this._totalBotCount;
             this._spawnBot();
             this._nextBotTime = this.rnd.realInRange(
                 Math.max(1.4 - 0.01*this.level, 0),
