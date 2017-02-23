@@ -66,7 +66,7 @@ var log = (function() {
  * The version number. Useful for marking changes in the storage format.
  * @const {string}
  */
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 
 /**
  * Local storage is per origin (per domain and protocol),
@@ -1875,6 +1875,7 @@ Supercold.Game = function(game) {
     // These will be set in init.
     this.level = -1;
     this._totalBotCount = -1;
+    this._bulletCount = -1;
 
     this._fireRate = 0;
     // Time remaining since next bot spawn.
@@ -1923,6 +1924,7 @@ Supercold.Game.prototype.init = function(options) {
     this.level = options.level;
     this._totalBotCount = 4 + Math.floor(this.level * 0.75);
     this._mutators = Supercold.storage.loadMutators();
+    this._bulletCount = (this._mutators.lmtdbull) ? this._totalBotCount*2 : -1;
 };
 
 
@@ -2329,10 +2331,13 @@ Supercold.Game.prototype._firePlayerBullet = function() {
     // Not ready to fire yet.
     if (player.remainingTime > 0)
         return false;
+    if (this._bulletCount === 0)
+        return false;
     if (DEBUG) log('Player bullet exists: ' + (this._groups.playerBullets.getFirstExists(false) !== null));
     this._fireBullet(
         this._groups.playerBullets.getFirstExists(false) || this._createPlayerBullet(),
         player, this._fireRate);
+    --this._bulletCount;
     return true;
 };
 
@@ -2561,7 +2566,7 @@ Supercold.play = function play(parent, config) {
             bighead: false,
             chibi: false,
             superhotswitch: false,
-            lmtdbullets: false,
+            lmtdbull: false,
             doge: false,
             godmode: false
         });
