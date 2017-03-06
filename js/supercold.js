@@ -44,16 +44,14 @@ function noop() {}
 
 /******************************* Basic Logging ********************************/
 
-/** @const */
-var log = (function() {
-    var console = window.console;
-
-    if (console && console.log) {
-        // Don't simply return console.log, because that messes up 'this'.
-        return function log(msg) {console.log(msg); };
-    }
-    return noop;
-}());
+/**
+ * Handy shortcuts.
+ * @const
+ */
+var log = console.log,
+    warn = console.warn,
+    error = console.error,
+    assert = console.assert;
 
 /******************************* Local Storage ********************************/
 
@@ -63,7 +61,7 @@ var log = (function() {
  */
 
 /**
- * The version number. Useful for marking changes in the storage format.
+ * The version number. Useful for marking incompatible changes in the storage format.
  * @const {string}
  */
 var VERSION = '1.0.1';
@@ -82,6 +80,9 @@ var PREFIX = 'supercold_';
 var Keys = {
     VERSION: PREFIX + 'version',
 
+    // The highest level that the player has reached.
+    HIGHEST_LEVEL: PREFIX + 'highest_level',
+    // The last level that the player played.
     LEVEL: PREFIX + 'level',
     TIMES: PREFIX + 'times',
     MUTATORS: PREFIX + 'mutators',
@@ -115,6 +116,8 @@ function GameStorageManager(localStorage) {
 
     this.saveLevel(this.load(Keys.LEVEL) || 1);
     this.saveTimes(this.load(Keys.TIMES) || 0);
+    this.save(Keys.HIGHEST_LEVEL,
+        this.load(Keys.HIGHEST_LEVEL) || this.load(Keys.LEVEL));
 }
 
 /**
@@ -132,7 +135,16 @@ GameStorageManager.prototype.load = function(key) {
 };
 
 /**
+ * Returns the highest level that the player has reached.
+ * @return {number} The highest level.
+ */
+GameStorageManager.prototype.loadHighestLevel = function() {
+    return Number(this.load(Keys.HIGHEST_LEVEL));
+};
+
+/**
  * Sets the last level that the player played.
+ * This will also increase the highest level reached if necessary.
  *
  * @param {number} level - The new level.
  * @throws {TypeError} if the parameter cannot be interpreted as a number.
@@ -147,6 +159,9 @@ GameStorageManager.prototype.saveLevel = function(level) {
         throw new RangeError(MSGS.NEG);
     }
     this.save(Keys.LEVEL, level);
+    if (level > Number(this.load(Keys.HIGHEST_LEVEL))) {
+        this.save(Keys.HIGHEST_LEVEL, level);
+    }
 };
 /**
  * Returns the last level that the player played.
@@ -179,12 +194,28 @@ GameStorageManager.prototype.loadRndState = function() {
 
 /********************************* Supercold **********************************/
 
+log('%c\n' +
+    '      _____________ __________________________________  _________  ________  .____     ________              \n' +
+    '     /   _____/    |   \\______   \\_   _____/\\______   \\ \\_   ___ \\ \\_____  \\ |    |    \\______ \\   \n' +
+    '     \\_____  \\|    |   /|     ___/|    __)_  |       _/ /    \\  \\/  /   |   \\|    |     |    |  \\      \n' +
+    '     /        \\    |  / |    |    |        \\ |    |   \\ \\     \\____/    |    \\    |___  |    `   \\    \n' +
+    '    /_______  /______/  |____|   /_______  / |____|_  /  \\______  /\\_______  /_______ \\/_______  /        \n' +
+    '            \\/                           \\/         \\/          \\/         \\/        \\/        \\/     \n\n',
+    'font-family: monospace');
+log('Welcome to SUPERCOLD! Hope you enjoy! :)\n\n');
+
+if (DEBUG) {
+    warn('Running in DEBUG mode! Do not forget to disable in production!\n\n');
+}
+
 /**
- * Some module-level global settings for our Phaser game.
+ * Some module-level global settings/constants for our Phaser game.
  * @const
  */
 var CLEAR_WORLD = true,
     CLEAR_CACHE = true,
+    AUTOSTART = true,
+    USE_WORLD_COORDS = true,
     /**
      * Use the more expensive but powerful P2 physics system. The others don't cut it.
      * Note: When a game object is given a P2 body, it has its anchor set to 0.5.
@@ -390,7 +421,7 @@ var Supercold = {
         trail: {
             x1: 0,
             y1: 0,
-            x2: 400,
+            x2: 500,
             y2: 0,
             colorStops: [
                 { stop: 0.0, color: 'rgba(255, 34, 33, 0.00)' },
@@ -542,7 +573,7 @@ function makeBitmapData(game, width, height, key, addToCache) {
     // Note: To avoid single-pixel jitters on mobile devices, it is strongly
     // recommended to use Sprite sizes that are even on both axis.
     if (DEBUG && (width % 2 === 1 || height % 2 === 1)) {
-        log('WARN: Sprite with odd dimension!');
+        warn('Sprite with odd dimension!');
     }
     // 'add.bitmapData' does the same thing as 'make.bitmapData',
     // i.e. it doesn't actually add the bitmapData object to the world.
@@ -625,7 +656,7 @@ function centerToCamera(game, sprite) {
     sprite.y = game.camera.view.halfHeight;
     // Reset 'fixedToCamera', so as to recalculate 'cameraOffset'.
     sprite.fixedToCamera = true;
-    if (DEBUG) log('Centered ' + ((sprite.name) ? sprite.name : 'sprite'));
+    if (DEBUG) log('Centered', (sprite.name) ? sprite.name : 'sprite');
 }
 
 
@@ -777,9 +808,6 @@ Announcer.prototype._destroy = function() {
     this.overlay.destroy();
 };
 
-/** @const */
-var AUTOSTART = true;
-
 Announcer.prototype._flashCamera1 = function() {
     this.add.tween(this.flash).to({
         alpha: 0
@@ -929,7 +957,7 @@ Supercold._ScalableState.prototype._setWorldBounds = function() {
     // The world is a large fixed size space with (0, 0) in the center.
     this.world.setBounds(
         -Math.round(width / 2), -Math.round(height / 2), width, height);
-    if (DEBUG) log('Set world bounds to: ' + this.world.bounds);
+    if (DEBUG) log('Set world bounds to', this.world.bounds);
 };
 
 /**
@@ -939,7 +967,7 @@ Supercold._ScalableState.prototype._setWorldBounds = function() {
  */
 Supercold._ScalableState.prototype._setCameraScale = function(width, height) {
     scaleToFill(this.camera.scale, width, height);
-    if (DEBUG) log('Set camera scale to: ' + this.camera.scale);
+    if (DEBUG) log('Set camera scale to', this.camera.scale);
 };
 
 /**
@@ -1018,6 +1046,11 @@ Supercold.Boot.prototype.init = function() {
     this.stage.backgroundColor = Supercold.style.stage.backgroundColor;
 
     this.scale.scaleMode = Phaser.ScaleManager.RESIZE;
+
+    // Let the camera view bounds be non-integer. This makes the motion smooth!
+    // https://phaser.io/docs/2.6.2/Phaser.Camera.html#roundPx
+    // https://phaser.io/docs/2.6.2/Phaser.Camera.html#follow
+    this.camera.roundPx = false;
 
     this.physics.startSystem(PHYSICS_SYSTEM);
     this.physics.p2.setImpactEvents(true);
@@ -1263,7 +1296,7 @@ Supercold.Preloader.prototype._makeOverlayBitmaps = function() {
 Supercold.Preloader.prototype.preload = function() {
     if (DEBUG) {
         this.load.onFileComplete.add(function(progress, key, success, totalLF, totalF) {
-            log(((success) ? 'Loaded ' : 'Failed to load ') + key);
+            log(((success) ? 'Loaded' : 'Failed to load'), key, 'asset');
             log('Progress: ' + progress + ', Total loaded files: ' + totalLF +
                 ', Total files: ' + totalF);
         }, this);
@@ -1311,7 +1344,7 @@ Supercold.MainMenu.prototype.create = function() {
 
     // Disable bounds checking for the camera, since it messes up centering.
     this.camera.bounds = null;
-    this.camera.follow(this.world);
+    this.camera.focusOn(this.world);
 
     new Announcer(this.game, Supercold.texts.SUPERCOLD.split(' '), {
         initDelay: 750,
@@ -1420,6 +1453,18 @@ Player.prototype.kill = function() {
     LiveSprite.prototype.kill.call(this);
 };
 
+Player.prototype.move = function() {
+
+};
+
+Player.prototype.rotate = function() {
+
+};
+
+Player.prototype.fire = function() {
+
+};
+
 /**
  * A bot.
  */
@@ -1449,6 +1494,14 @@ Bot.prototype.constructor = Bot;
 Bot.prototype.kill = function() {
     // TODO: Add fancy kill effect.
     LiveSprite.prototype.kill.call(this);
+};
+
+Bot.prototype.fire = function() {
+
+};
+
+Bot.prototype.advance = function() {
+
 };
 
 /**
@@ -1803,13 +1856,46 @@ function ReloadBar(game, x, y, key, fillStyle) {
         key: key
     });
     this.hud.rect(0, 0, this.hud.width, this.hud.height, fillStyle);
+
+    this._tween = null;
+
+    this.add = game.add;
+    this.time = game.time;
 }
 
 ReloadBar.prototype = Object.create(HUD.prototype);
 ReloadBar.prototype.constructor = ReloadBar;
 
-ReloadBar.prototype.update = function(percentage) {
-    this.hudImage.width = this.hudImage.texture.width * percentage;
+/**
+ * @param {number} progress - A value in the range [0, 1].
+ */
+ReloadBar.prototype.update = function(progress) {
+    this.hudImage.width = this.hudImage.texture.width * progress;
+    this.hudImage.alpha = (progress === 1) ? 1 : 0.75;
+};
+
+ReloadBar.prototype._removeTween = function() {
+    this._tween = null;
+};
+
+ReloadBar.prototype.shake = function() {
+    var duration = this.time.physicsElapsedMS;
+
+    // Already shaking!
+    if (this._tween) return;
+
+    // The element is fixed to camera, so use the cameraOffset property.
+    this._tween = this.add.tween(this.hudImage.cameraOffset).to({
+        x: '-1'
+    }, duration, Phaser.Easing.Linear.None);
+    this._tween.to({
+        x: '+2'
+    }, duration, Phaser.Easing.Linear.None, !AUTOSTART, 0, 15, true);
+    this._tween.to({
+        x: '-1'
+    }, duration, Phaser.Easing.Linear.None);
+    this._tween.onComplete.add(this._removeTween, this);
+    this._tween.start();
 };
 
 function HotswitchBar(game) {
@@ -2034,7 +2120,7 @@ Supercold.Game.prototype._superhot = function() {
             superDuration = announcer.options.nextDelay + announcer.options.duration,
             hotDuration = announcer.options.finalDelay + announcer.options.duration,
             duration = superDuration + hotDuration,
-            times = 4, delay = times * duration, i;
+            times = 3, delay = times * duration, i;
 
         for (i = 0; i < times; ++i) {
             this.time.events.add(i*duration, function saySuper() {
@@ -2096,6 +2182,7 @@ Supercold.Game.prototype.restart = function restart() {
 
 Supercold.Game.prototype.quit = function quit() {
     hideTip();
+    log('\nThank you for playing! :)');
     this.state.start('MainMenu');
 };
 
@@ -2180,49 +2267,57 @@ Supercold.Game.prototype.create = function() {
             alpha: 0
         }, duration = 400, playerTween, botTweeen;
 
-        if (DEBUG) log('Clicked on bot.');
-        // Hotswitch may not be ready yet or we may be in the middle of it.
-        if (this._nextHotSwitch > 0 || this._hotswitching) {
+        if (DEBUG) log('Clicked on bot');
+        // NOTE: Don't use Ctrl + left lick since it is a simulated right click!
+        // Check for the appropriate controls.
+        if (!((pointer.leftButton.isDown && pointer.leftButton.shiftKey) ||
+                pointer.rightButton.isDown)) {
             return;
         }
-        // Don't use Ctrl + left lick since it is a simulated right click!
-        if ((pointer.leftButton.isDown && pointer.leftButton.shiftKey) ||
-                pointer.rightButton.isDown) {
-            if (DEBUG) log('Hotswitching...');
-            this._hotswitching = true;
-            // Fade out.
-            playerTween = this.add.tween(player).to(
-                properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
-            botTweeen = this.add.tween(bot).to(
-                properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
-            botTweeen.onComplete.addOnce(function swap() {
-                var temp;
-
-                // Make the camera move more smoothly for the hotswitch.
-                this.camera.follow(player, Phaser.Camera.FOLLOW_LOCKON, 0.2, 0.2);
-
-                temp = player.body.x;
-                player.body.x = bot.body.x;
-                bot.body.x = temp;
-                temp = player.body.y;
-                player.body.y = bot.body.y;
-                bot.body.y = temp;
-
-                this.camera.flash(0xEEEAE0, 250);
-
-                // Fade in.
-                properties.alpha = 1;
-                playerTween.to(properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
-                botTweeen.to(properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
-                this._nextHotSwitch = this._hotswitchTimeout;
-                botTweeen.onComplete.addOnce(function() {
-                    // Reset the camera to its default behaviour.
-                    this.camera.follow(player);
-                    this._hotswitching = false;
-                    if (DEBUG) log('Hotswitched.');
-                }, this);
-            }, this);
+        // Hotswitch may not be ready yet
+        if (this._nextHotSwitch > 0) {
+            this._huds.hotswitchBar.shake();
+            return;
         }
+        // or we may be in the middle of it.
+        if (this._hotswitching) {
+            return;
+        }
+
+        if (DEBUG) log('Hotswitching...');
+        this._hotswitching = true;
+        // Fade out.
+        playerTween = this.add.tween(player).to(
+            properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
+        botTweeen = this.add.tween(bot).to(
+            properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
+        botTweeen.onComplete.addOnce(function swap() {
+            var temp;
+
+            // Make the camera move more smoothly for the hotswitch.
+            this.camera.follow(player, Phaser.Camera.FOLLOW_LOCKON, 0.2, 0.2);
+
+            temp = player.body.x;
+            player.body.x = bot.body.x;
+            bot.body.x = temp;
+            temp = player.body.y;
+            player.body.y = bot.body.y;
+            bot.body.y = temp;
+
+            this.camera.flash(0xEEEAE0, 250);
+
+            // Fade in.
+            properties.alpha = 1;
+            playerTween.to(properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
+            botTweeen.to(properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
+            this._nextHotSwitch = this._hotswitchTimeout;
+            botTweeen.onComplete.addOnce(function() {
+                // Reset the camera to its default behaviour.
+                this.camera.follow(player);
+                this._hotswitching = false;
+                if (DEBUG) log('Hotswitched!');
+            }, this);
+        }, this);
     }, this);
 
     this._huds.minimap = new Minimap(this.game);
@@ -2274,6 +2369,19 @@ Supercold.Game.prototype.create = function() {
     this._nextHotSwitch = this._hotswitchTimeout;
     this._hotswitching = false;
     this._fireRate = (this._mutators.fastgun) ? Supercold.fastFireRate : Supercold.fireRate;
+
+    // We need to handle the shaking of the bullet bar separately to avoid
+    // shaking immediately after a bullet is fired and to allow the player
+    // to keep the fire control pressed without constanlty shaking the bar.
+    function onFireControl(buttonOrKey) {
+        if (!buttonOrKey.shiftKey) {            // not trying to hotswitch
+            if (player.remainingTime > 0) {
+                this._huds.bulletBar.shake();
+            }
+        }
+    }
+    this.input.activePointer.leftButton.onDown.add(onFireControl, this);
+    this._controls.fireKey.onDown.add(onFireControl, this);
 };
 
 
@@ -2328,12 +2436,11 @@ Supercold.Game.prototype._fireBullet = function(bullet, sprite, fireRate) {
 Supercold.Game.prototype._firePlayerBullet = function() {
     var player = this._sprites.player;
 
-    // Not ready to fire yet.
-    if (player.remainingTime > 0)
+    // Not ready to fire yet or no bullets left.
+    if (player.remainingTime > 0 || this._bulletCount === 0) {
         return false;
-    if (this._bulletCount === 0)
-        return false;
-    if (DEBUG) log('Player bullet exists: ' + (this._groups.playerBullets.getFirstExists(false) !== null));
+    }
+    if (DEBUG) log('Player bullet exists:', this._groups.playerBullets.getFirstExists(false) !== null);
     this._fireBullet(
         this._groups.playerBullets.getFirstExists(false) || this._createPlayerBullet(),
         player, this._fireRate);
@@ -2343,15 +2450,16 @@ Supercold.Game.prototype._firePlayerBullet = function() {
 
 Supercold.Game.prototype._fireBotBullet = function(bot) {
     // Not ready to fire yet.
-    if (bot.remainingTime > 0)
+    if (bot.remainingTime > 0) {
         return;
+    }
     // Wait sometimes before firing to make things a bit more unpredictable.
     if (this.rnd.frac() <= 1/3) {
         bot.remainingTime = this.rnd.between(
             0, Math.max(Supercold.fireRate * (1 - this.level/100), 0));
         return;
     }
-    if (DEBUG) log('Bot bullet exists: ' + (this._groups.botBullets.getFirstExists(false) !== null));
+    if (DEBUG) log('Bot bullet exists:', this._groups.botBullets.getFirstExists(false) !== null);
     this._fireBullet(
         this._groups.botBullets.getFirstExists(false) || this._createBotBullet(),
         bot, Supercold.fireRate);
@@ -2390,6 +2498,13 @@ Supercold.Game.prototype._advanceBot = function(
     // TODO: Consider more complicated movement patterns.
     moveForward(bot.body, bot.body.rotation, speed);
 
+    // Dodge sometimes (chance: 1 / (60fps * 3sec)).
+    if (this.rnd.frac() <= 1 / (this.time.desiredFps * 3)) {
+        bot.dodging = true;
+        bot.duration = 0.25 + 0.005*this.level;   // secs
+        bot.direction = (this.rnd.between(0, 1)) ? 'left' : 'right';
+    }
+
     // If the player fired and we are not already dodging, try to dodge.
     if (playerFired) {
         // Dodge only when the player is facing us, so it doesn't look stupid.
@@ -2405,9 +2520,6 @@ Supercold.Game.prototype._advanceBot = function(
         }
     }
 };
-
-/** @const */
-var USE_WORLD_COORDS = true;
 
 Supercold.Game.prototype._rotatePlayer = function() {
     var player = this._sprites.player, playerRotated, newRotation;
@@ -2428,6 +2540,7 @@ Supercold.Game.prototype.update = function() {
         fireKey = this._controls.fireKey,
         verVec = this._cached.verVec,
         horVec = this._cached.horVec,
+        fireButton = this.input.activePointer.leftButton,
         playerFired = false,
         playerMoved, playerRotated, newDirection,
         bulletSpeed, botSpeed, elapsedTime;
@@ -2457,10 +2570,8 @@ Supercold.Game.prototype.update = function() {
     playerRotated = this._rotatePlayer() && !this._mutators.freelook;
 
     if (player.alive) {
-        // Process firing controls.
-        if ((this.input.activePointer.leftButton.isDown &&
-                    !this.input.activePointer.leftButton.shiftKey) ||
-                fireKey.isDown) {
+        // Process firing controls (check that we are not trying to hotswitch).
+        if ((fireButton.isDown && !fireButton.shiftKey) || fireKey.isDown) {
             playerFired = this._firePlayerBullet();
         }
 
@@ -2526,6 +2637,10 @@ Supercold.Game.prototype.shutdown = function() {
      * shutdown method if we wish to free-up the resources they use.
      * Note that BitmapData objects added to the cache will be destroyed for us.
      */
+    if (DEBUG) log('Shutting down Game state...');
+
+    // Captured keys may mess with input on main menu.
+    this.input.keyboard.clearCaptures();
 };
 
 
@@ -2540,31 +2655,62 @@ Supercold.Game.prototype.render = function() {
 
 /****************************** Setup and Expose ******************************/
 
+function hideMenu() {
+    document.getElementById('menu').style.display = 'none';
+}
+function showMenu() {
+    document.getElementById('menu').style.display = 'block';
+}
+
+function loadLevelInfo() {
+    document.getElementById('maxlevel').textContent = Supercold.storage.loadHighestLevel();
+    document.getElementById('level').value = Supercold.storage.loadLevel();
+}
+
 function emptyClassName(selector) {
     Array.prototype.forEach.call(document.querySelectorAll(selector), function(el) {
         el.className = '';
     });
 }
 
-Supercold.play = function play(parent, config) {
+Supercold.play = function play(parent) {
     // Tell Phaser to cover the entire window and use the best renderer.
-    var game = new Phaser.Game('100', '100', Phaser.AUTO, parent),
-        unlockLevels = [10, 20, 30, 40, 50, 75, 100],
-        mutators, mutator, level, i;
+    // Note that WebGL in Firefox has issues, so we go for plain canvas!
+    // http://stackoverflow.com/a/7000222/1751037
+    var isFirefox = (navigator.userAgent.toLowerCase().indexOf('firefox') > -1),
+        renderer = (!isFirefox) ? Phaser.AUTO : Phaser.CANVAS,
+        game = new Phaser.Game('100', '100', renderer, parent),
+        unlockLevels, level, mutators, mutator, i;
+
+    if (isFirefox) {
+        warn('Firefox has performance issues with WebGL! Using canvas renderer...');
+    }
 
     /**
      * The single instance of data storage for our game.
      */
     Supercold.storage = new Supercold.GameStorageManager();
 
+    loadLevelInfo();
+    document.getElementById('level').addEventListener('change', function(event) {
+        var level = Supercold.storage.loadHighestLevel(),
+            newLevel = parseInt(this.value, 10);
+
+        this.value = (isNaN(newLevel)) ? level : Math.min(level, Math.max(1, newLevel));
+        Supercold.storage.saveLevel(this.value);
+    }, false);
+
     mutators = Supercold.storage.loadMutators();
     if (mutators === null) {
+        // Default mutators (all off)
         Supercold.storage.saveMutators({
             freelook: false,
             fasttime: false,
             fastgun: false,
+            shotgun: false,
             bighead: false,
             chibi: false,
+            dodge: false,
             superhotswitch: false,
             lmtdbull: false,
             doge: false,
@@ -2577,7 +2723,9 @@ Supercold.play = function play(parent, config) {
         }
     }
 
-    level = Supercold.storage.loadLevel();
+    // Show unlocked mutators.
+    unlockLevels = [10, 20, 30, 40, 50, 60, 75, 100, 120];
+    level = Supercold.storage.loadHighestLevel();
     for (i = 0; i < unlockLevels.length; ++i) {
         if (unlockLevels[i] <= level) {
             emptyClassName('.locked' + unlockLevels[i]);
@@ -2585,7 +2733,11 @@ Supercold.play = function play(parent, config) {
             break;
         }
     }
+    if (level >= unlockLevels[unlockLevels.length-1]) {
+        document.getElementById('mutator-hint').style.display = 'none';
+    }
 
+    // Handle mutator modifications.
     Array.prototype.forEach.call(document.querySelectorAll('#mutators input'), function(input) {
         input.addEventListener('change', function(event) {
             var mutators = Supercold.storage.loadMutators();
@@ -2596,9 +2748,12 @@ Supercold.play = function play(parent, config) {
     });
 
     // Global per-instance options. Use a namespace to avoid name clashes.
-    game.supercold = Phaser.Utils.extend({
-        onMainMenuOpen: noop
-    }, config);
+    game.supercold = {
+        onMainMenuOpen: function() {
+            loadLevelInfo();
+            showMenu();
+        }
+    };
 
     game.state.add('Boot', Supercold.Boot);
     game.state.add('Preloader', Supercold.Preloader);
@@ -2608,8 +2763,12 @@ Supercold.play = function play(parent, config) {
 
     game.state.start('Boot');
 
-    return game;
+    document.getElementById('start').addEventListener('click', function(event) {
+        hideMenu();
+        game.state.start('Intro');
+    }, false);
 };
+
 
 window.Supercold = Supercold;
 

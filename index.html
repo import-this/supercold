@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html manifest="cache.appcache">
+<html lang="en" manifest="cache.appcache">
     <head>
         <meta charset="UTF-8">
 
@@ -7,7 +7,7 @@
         <meta name="application-name" content="SUPERCOLD">
         <meta name="description" content="A simple 2D browser game
             with the clever mechanics of SUPERHOT - #SUPERCOLD">
-        <meta name="keywords" content="SUPERCOLD, SUPERHOT, clone, game, 2D,
+        <meta name="keywords" content="SUPERCOLD, SUPERHOT, game, 2D,
             HTML5, Phaser, import-this, github, github.io, open source">
         <meta name="robots" content="index, follow">
 
@@ -37,7 +37,6 @@
         <!-- ArrayBuffer and DataView support for IE9, required by P2 Physics. -->
         <script type="text/javascript" src="js/dataview-polyfill.js"></script>
         <script type="text/javascript" src="js/phaser-supercold.min.js"></script>
-        <script type="text/javascript" src="js/supercold.js"></script>
 
         <!-- Google Analytics -->
         <script>
@@ -88,12 +87,16 @@
                             <strong>Backspace</strong> to restart.
                         </div>
                         <div>
+                            Select level (1-<span id="maxlevel"></span>):
+                            <input id="level" type="text" name="level" size="1" maxlength="3" required>
+                        </div>
+                        <div>
                             <button id="start" name="start" type="button">Start</button>
                         </div>
                     </div>
                     <div id="mutator-pane" class="pane">
                         <h3>Mutators</h3>
-                        <div>
+                        <div id="mutator-hint">
                             (Reach higher levels to unlock more)
                         </div>
                         <div id="mutators">
@@ -108,6 +111,10 @@
                             <div>
                                 <input id="fastgun" type="checkbox">
                                 <label for="fastgun" class="locked50"><span></span>fastgun - You can shoot faster.</label>
+                            </div>
+                            <div style="display:none">
+                                <input id="shotgun" type="checkbox">
+                                <label for="shotgun" class="locked60"><span></span>shotgun - Fire many bullets at once.</label>
                             </div>
                             <div>
                                 <input id="superhotswitch" type="checkbox">
@@ -129,9 +136,13 @@
                                 <input id="doge" type="checkbox">
                                 <label for="doge" class="locked40"><span></span>doge - MEMES! VERY SUPER! SUCH HOT! WOW!</label>
                             </div>
+                            <div style="display:none">
+                                <input id="dodge" type="checkbox">
+                                <label for="dodge" class="locked100"><span></span>dodge - Press  while moving to dodge.</label>
+                            </div>
                             <div>
                                 <input id="godmode" type="checkbox">
-                                <label for="godmode" class="locked100"><span></span>godmode - You are invincible!</label>
+                                <label for="godmode" class="locked120"><span></span>godmode - You are invincible!</label>
                             </div>
                         </div>
                     </div>
@@ -176,7 +187,7 @@
                 Try out some of the several mutators.
             </div>
             <div class="tip">
-                Reach level 100 for a fun mutator.
+                Reach level 120 for a fun mutator.
             </div>
             <div class="tip">
                 If you are playing with limited bullets and you run out,<br/>
@@ -198,14 +209,11 @@
             press 'BACKSPACE' to restart instantly
         </div>
 
+        <script type="text/javascript" src="js/supercold.js"></script>
         <script type="text/javascript">
+            /*globals Supercold */
             (function(document) {
-                function hideMenu() {
-                    document.getElementById('menu').style.display = 'none';
-                }
-                function showMenu() {
-                    document.getElementById('menu').style.display = 'block';
-                }
+                "use strict";
 
                 // As of February 2017, Chrome, Opera, FF and IE (at least on Windows)
                 // trigger the default action for the contextmenu event, despite Phaser.
@@ -216,23 +224,15 @@
                         event.preventDefault();
                     }, false);
 
-                // Let the game begin!
-                var game = Supercold.play('supercold-canvas', {
-                    onMainMenuOpen: showMenu
-                });
-
-                document.getElementById('start')
-                    .addEventListener('click', function(event) {
-                        hideMenu();
-                        game.state.start('Intro');
-                    }, false);
-
                 Array.prototype.forEach.call(document.querySelectorAll('#mutators label'), function(input) {
                     // Prevent text selection on successive clicks.
                     input.addEventListener('mousedown', function onMousedown(event) {
                         event.preventDefault();     // but let the event propagate!
                     }, false);
                 });
+
+                // Let the game begin!
+                Supercold.play('supercold-canvas');
             }(document));
         </script>
 

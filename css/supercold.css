@@ -137,6 +137,43 @@ button:hover {
             box-shadow: 0 0 5px 1px rgb(245, 4, 3);
 }
 
+#center {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    -webkit-transform: translate(-50%, -50%);
+       -moz-transform: translate(-50%, -50%);
+        -ms-transform: translate(-50%, -50%);
+         -o-transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%);
+
+    min-width: 704px;
+    text-align: center;
+    padding: 0.75em 1em;
+    border-radius: 8px;
+
+    background-color: rgba(40, 40, 40, 0.925);
+    background: -webkit-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+    background:    -moz-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+    background:     -ms-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+    background:      -o-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+    background:         radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
+
+    -webkit-box-shadow: 0 0 6px 1px rgb(24, 24, 24);
+            box-shadow: 0 0 6px 1px rgb(24, 24, 24);
+}
+#panes {
+    display: table;
+    border-spacing: 0.75em;
+}
+.pane {
+    display: table-cell;
+    vertical-align: middle;
+}
+.pane div {
+    margin: 4px 0;
+}
+
 #supercold {
     font-size: 1.75em;
     font-weight: lighter;
@@ -173,6 +210,7 @@ button:hover {
 #supercold span, #superhot span {
     font-weight: bold;
 }
+
 #description strong {
     display: block;
 }
@@ -185,44 +223,23 @@ button:hover {
                 -1px  1px 5px rgb(245, 4, 3),
                  1px -1px 5px rgb(245, 4, 3);
 }
-#center {
-    position: fixed;
-    left: 50%;
-    top: 50%;
-    -webkit-transform: translate(-50%, -50%);
-       -moz-transform: translate(-50%, -50%);
-        -ms-transform: translate(-50%, -50%);
-         -o-transform: translate(-50%, -50%);
-            transform: translate(-50%, -50%);
-
-    min-width: 704px;
+#level {
+    color: rgb(230, 251, 255);
+    background-color: #3a3a3a;
     text-align: center;
-    padding: 0.75em 1em;
-    border-radius: 8px;
+    border: 2px solid rgb(210, 231, 235);
+    text-shadow: -1px 0 4px rgb(230, 251, 255),
+                  1px 0 4px rgb(230, 251, 255);
+    -webkit-box-shadow: 0 0 8px 1px rgb(210, 231, 235);
+            box-shadow: 0 0 8px 1px rgb(210, 231, 235);
+}
+#start {
+    cursor: pointer;
+    margin-top: 0.4em;
+}
 
-    background-color: rgba(40, 40, 40, 0.925);
-    background: -webkit-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
-    background:    -moz-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
-    background:     -ms-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
-    background:      -o-radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
-    background:         radial-gradient(rgba(40, 40, 40, 0.925), rgba(16, 16, 16, 0.925));
-
-    -webkit-box-shadow: 0 0 6px 1px rgb(24, 24, 24);
-            box-shadow: 0 0 6px 1px rgb(24, 24, 24);
-}
-#panes {
-    display: table;
-    border-spacing: 0.75em;
-}
-.pane {
-    display: table-cell;
-    vertical-align: middle;
-}
 #mutator-pane {
     font-size: 0.95em;
-}
-.pane div {
-    margin: 4px 0;
 }
 #mutator-pane div {
     margin: 2px 0;
@@ -231,13 +248,10 @@ button:hover {
     display: inline-block;
     text-align: left;
 }
-#start {
-    cursor: pointer;
-    margin-top: 0.4em;
-}
-.locked10, .locked20, .locked30, .locked40, .locked50, .locked75, .locked100 {
+.locked10, .locked20, .locked30, .locked40, .locked50, .locked60, .locked75, .locked100, .locked120 {
     display: none;
 }
+
 #more {
     position: fixed;
     top: 0;
