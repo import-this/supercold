@@ -25,7 +25,7 @@
  *     http://usejsdoc.org/
  *
  * Date: 15/2/2017
- * @version: 1.1.0
+ * @version: 1.2.0
  * @author Vasilis Poulimenos
  */
 
@@ -51,7 +51,15 @@ function noop() {}
 var log = console.log,
     warn = console.warn,
     error = console.error,
-    assert = console.assert;
+    // Use assert only in DEBUG mode!
+    assert = function assert(assertion) {
+        console.assert.apply(console, arguments);
+        // console.assert does not throw in browsers!
+        // https://developer.mozilla.org/en-US/docs/Web/API/console/assert
+        if (!assertion) {
+            throw 'AssertionError';
+        }
+    };
 
 /******************************* Local Storage ********************************/
 
@@ -64,7 +72,7 @@ var log = console.log,
  * The version number. Useful for marking incompatible changes in the storage format.
  * @const {string}
  */
-var VERSION = '1.0.1';
+var STORAGE_VERSION = '1.0.1';
 
 /**
  * Local storage is per origin (per domain and protocol),
@@ -108,10 +116,10 @@ function GameStorageManager(localStorage) {
     this.localStorage = localStorage || window.localStorage;
 
     // If the storage uses an old version, erase everything to avoid errors.
-    if (this.load(Keys.VERSION) !== VERSION) {
+    if (this.load(Keys.VERSION) !== STORAGE_VERSION) {
         if (DEBUG) log('Clearing storage...');
         this.clear();
-        this.save(Keys.VERSION, VERSION);
+        this.save(Keys.VERSION, STORAGE_VERSION);
     }
 
     this.saveLevel(this.load(Keys.LEVEL) || 1);
@@ -124,7 +132,19 @@ function GameStorageManager(localStorage) {
  * Clears the local storage.
  */
 GameStorageManager.prototype.clear = function() {
-    this.localStorage.clear();
+    var localStorage = window.localStorage, keys = [], i, key;
+
+    // Iterate over the local storage keys and remove the ones with our prefix.
+    // https://html.spec.whatwg.org/multipage/webstorage.html#dom-storage-key
+    for (i = 0; i < localStorage.length; ++i) {
+        key = localStorage.key(i);
+        if (key.startsWith(PREFIX)) {
+            keys.push(key);
+        }
+    }
+    keys.forEach(function(key, i) {
+        localStorage.removeItem(key);
+    });
 };
 
 GameStorageManager.prototype.save = function(key, value) {
@@ -194,6 +214,12 @@ GameStorageManager.prototype.loadRndState = function() {
 
 /********************************* Supercold **********************************/
 
+/**
+ * The game version. Not really used for anything right now.
+ * @const
+ */
+var VERSION = '1.2.0';
+
 log('%c\n' +
     '      _____________ __________________________________  _________  ________  .____     ________              \n' +
     '     /   _____/    |   \\______   \\_   _____/\\______   \\ \\_   ___ \\ \\_____  \\ |    |    \\______ \\   \n' +
@@ -202,6 +228,7 @@ log('%c\n' +
     '    /_______  /______/  |____|   /_______  / |____|_  /  \\______  /\\_______  /_______ \\/_______  /        \n' +
     '            \\/                           \\/         \\/          \\/         \\/        \\/        \\/     \n\n',
     'font-family: monospace');
+log('Version:', VERSION);
 log('Welcome to SUPERCOLD! Hope you enjoy! :)\n\n');
 
 if (DEBUG) {
@@ -307,20 +334,22 @@ var Supercold = {
      * recommended to use Sprite sizes that are even on both axis.
      */
     player: {
-        radius: 25,
-        sideLen: 16
+        radius: 25
     },
     bullet: {
         width: 16,
         height: 8,
-        bodyLen: 8,
-        tipRadius: 4
+        bodyLen: 8
     },
     minimap: {
+        x: 10,          // The x-coordinate of the right of the minimap.
+        y: 10,          // The y-coordinate of the bottom of the minimap.
         width: 200,
         height: 150
     },
     bar: {
+        x: 10,          // The x-coordinate of the right of the bar.
+        // y relative to minimap!
         width: 200,
         height: 10
     },
@@ -341,9 +370,9 @@ var Supercold = {
         }
     },
 
-    // 2 times per second
-    fireRate: 1 / 2,
-    fastFireRate: 1 / 4,
+    fireRate: 1 / 2,            // 2 times per second
+    fastFireRate: 1 / 4,        // 4 times per second
+    initFireDelay: 1 / 12,
 
     hotswitchTimeout: 2.5,
     superhotswitchTimeout: 0.5,
@@ -368,7 +397,7 @@ var Supercold = {
         },
         player: {
             color: 'rgb(34, 34, 34)',
-            strokeStyle: 'rgba(44, 44, 44, 0.95)',
+            strokeStyle: 'rgb(50, 48, 48)',
             lineWidth: 6,
             shadowOffsetX: 0,
             shadowOffsetY: 0,
@@ -377,12 +406,12 @@ var Supercold = {
         },
         bot: {
             color: 'rgb(255, 34, 33)',
-            strokeStyle: 'rgba(34, 34, 34, 0.95)',
+            strokeStyle: 'rgb(44, 34, 34)',
             lineWidth: 6,
             shadowOffsetX: 0,
             shadowOffsetY: 0,
-            shadowColor: 'rgba(255, 34, 33, 0.9)',
-            shadowBlur: 6
+            shadowColor: 'rgba(255, 34, 33, 0.95)',
+            shadowBlur: 8
         },
         minimap: {
             background: {
@@ -394,12 +423,12 @@ var Supercold = {
             },
             innerBorder: {
                 color: 'rgba(64, 64, 64, 0.75)',
-                lineWidth: 2
+                lineWidth: 2.5
             },
             player: {
                 radius: 4,
                 color: 'rgb(34, 34, 34)',
-                strokeStyle: 'rgba(44, 44, 44, 0.95)',
+                strokeStyle: 'rgba(48, 48, 48, 0.95)',
                 lineWidth: 1.5
             },
             bot: {
@@ -416,7 +445,8 @@ var Supercold = {
             color: 'rgba(250, 0, 0, 0.9)'
         },
         bullet: {
-            color: 'rgb(30, 35, 38)'
+            color: 'rgb(30, 35, 38)',
+            markColor: 'rgba(140, 140, 140, 0.95)'
         },
         trail: {
             x1: 0,
@@ -433,7 +463,7 @@ var Supercold = {
             shadowOffsetX: 0,
             shadowOffsetY: 0,
             shadowColor: 'rgba(255, 34, 33, 0.85)',
-            shadowBlur: 5
+            shadowBlur: 2
         },
         grid: {
             color1: 'rgba(255, 245, 245, 0.85)',
@@ -478,9 +508,10 @@ var Supercold = {
         },
         superhot: {
             font: 'Arial',
-            fontSize: '275px',
             fontWeight: 'normal',
             fill: 'rgb(245, 251, 255)',
+            stroke: 'rgba(245, 251, 255, 0.5)',
+            strokeThickness: 1,
             boundsAlignH: 'center',
             boundsAlignV: 'middle',
             shadowOffsetX: 0,
@@ -501,20 +532,21 @@ var Supercold = {
         'HOT': {
             fontWeight: 'bolder',
             shadowColor: 'rgba(215, 251, 255, 0.925)',
-            shadowBlur: 20
+            shadowBlur: 22
         },
         'COLD': {
             fontWeight: 'bolder',
             shadowColor: 'rgba(210, 250, 255, 0.95)',
-            shadowBlur: 24
+            shadowBlur: 26
         },
         'YOU': {
             fontWeight: 'bold',
             //fill: 'rgb(249, 19, 21)',
             //shadowColor: 'rgba(251, 81, 81, 0.95)'
             fill: 'rgb(34, 34, 34)',
+            stroke: 'rgba(34, 34, 34, 0.5)',
             shadowColor: 'rgba(48, 48, 48, 0.95)',
-            shadowBlur: 12
+            shadowBlur: 16
         },
         'LEVEL': {
             fontWeight: 'bold'
@@ -533,33 +565,30 @@ var Supercold = {
         },
         fireKey: Phaser.KeyCode.SPACEBAR,
         quitKey: Phaser.KeyCode.ESC,
-        restartKey: Phaser.KeyCode.BACKSPACE
+        restartKey: Phaser.KeyCode.T
     },
 
     texts: {
-        SUPERHOT: 'SUPER HOT',
-        SUPERCOLD: 'SUPER COLD',
-        MECHANICS: 'TIME MOVES WHEN YOU MOVE',
+        SUPERHOT: 'SUPER HOT'.split(' '),
+        SUPERCOLD: 'SUPER COLD'.split(' '),
+        MECHANICS: 'TIME MOVES WHEN YOU MOVE'.split(' '),
+        // This is a special case!
         LEVEL: 'LEVEL'
     }
 };
 
+// Freeze objects to detect erroneous overriding.
+if (Object.freeze) {
+    (function recursiveFreeze(obj) {
+        var prop;
 
-if (DEBUG) {
-    // Freeze objects in DEBUG mode to detect erroneous overriding,
-    // but leave them open for modification in production code.
-    if (Object.freeze) {
-        (function recursiveFreeze(obj) {
-            var prop;
-
-            for (prop in obj) {
-                if (typeof obj[prop] === 'object') {
-                    Object.freeze(obj[prop]);
-                    recursiveFreeze(obj[prop]);
-                }
+        for (prop in obj) {
+            if (typeof obj[prop] === 'object') {
+                Object.freeze(obj[prop]);
+                recursiveFreeze(obj[prop]);
             }
-        }(Supercold));
-    }
+        }
+    }(Supercold));
 }
 
 
@@ -567,39 +596,16 @@ Supercold.GameStorageManager = GameStorageManager;
 
 /******************************* Utilities ********************************/
 
-function makeBitmapData(game, width, height, key, addToCache) {
-    if (addToCache === undefined) addToCache = true;
+function getWordStyle(word) {
+    var defaultStyle = Supercold.style.superhot,
+        // In case of phrase instead of word, use the first word as index.
+        wordStyle = Supercold.wordStyles[word.split(' ')[0]];
 
-    // Note: To avoid single-pixel jitters on mobile devices, it is strongly
-    // recommended to use Sprite sizes that are even on both axis.
-    if (DEBUG && (width % 2 === 1 || height % 2 === 1)) {
-        warn('Sprite with odd dimension!');
+    if (wordStyle) {
+        return Phaser.Utils.extend({}, defaultStyle, wordStyle);
+    } else {
+        return defaultStyle;
     }
-    // 'add.bitmapData' does the same thing as 'make.bitmapData',
-    // i.e. it doesn't actually add the bitmapData object to the world.
-    // (BitmapData's are Game Objects and don't live on the display list.)
-    return game.make.bitmapData(width, height, key, addToCache);
-}
-
-
-function addColorStops(grd, colorStops) {
-    var i, colorStop;
-
-    for (i = 0; i < colorStops.length; ++i) {
-        colorStop = colorStops[i];
-        grd.addColorStop(colorStop.stop, colorStop.color);
-    }
-    return grd;
-}
-
-function createLinearGradient(ctx, x1, y1, x2, y2, colorStops) {
-    return addColorStops(
-        ctx.createLinearGradient(x1, y1, x2, y2), colorStops);
-}
-
-function createRadialGradient(ctx, x1, y1, r1, x2, y2, r2, colorStops) {
-    return addColorStops(
-        ctx.createRadialGradient(x1, y1, r1, x2, y2, r2), colorStops);
 }
 
 
@@ -637,28 +643,31 @@ function scaleToFit(scale, width, height, nativeWidth, nativeHeight) {
     scale.setTo(Math.min(width / nativeWidth, height / nativeHeight));
 }
 
-function scaleTextToFit(game, text) {
-    // Force the text to always fit the screen (factor * game.width/height).
-    // Use text.texture, since text.width/height takes into account scaling.
-    // Notice the factor for text.height. Height measuring for text is not
-    // accurate, so Phaser ends up with a height larger than the actual one.
-    scaleToFit(text.scale,
-               Math.round(0.9 * game.width),
-               Math.round(0.9 * game.height),
-               text.texture.width,
-               Math.round(text.texture.height / 1.4));
-    // Undo the camera scaling that will be applied by Phaser.
-    text.scale.divide(game.camera.scale.x, game.camera.scale.y);
+/**
+ * Puts the given *fixed to camera* sprite in the center of the camera view.
+ * @param {Phaser.Camera} camera - A reference to the game camera.
+ * @param {Phaser.Sprite} sprite - The sprite to center.
+ */
+function centerFixedToCamera(camera, sprite) {
+    if (DEBUG) assert(sprite.fixedToCamera);
+    sprite.centerX = camera.view.halfWidth;
+    sprite.centerY = camera.view.halfHeight;
+    sprite.cameraOffset.set(sprite.x, sprite.y);
+    if (DEBUG) {
+        log('Centered fixed to camera', (sprite.name) ? sprite.name : 'sprite');
+    }
 }
 
-function centerToCamera(game, sprite) {
-    sprite.x = game.camera.view.halfWidth;
-    sprite.y = game.camera.view.halfHeight;
-    // Reset 'fixedToCamera', so as to recalculate 'cameraOffset'.
-    sprite.fixedToCamera = true;
-    if (DEBUG) log('Centered', (sprite.name) ? sprite.name : 'sprite');
-}
 
+function _resize() {
+    /*jshint validthis: true */
+    var camera = this.game.camera, scale = camera.scale;
+
+    // Account for camera scaling.
+    // Note: World and camera scaling is the same in Phaser.
+    this.scale.set(1 / scale.x, 1 / scale.y);
+    centerFixedToCamera(camera, this);
+}
 
 /**
  * An image that is always centered in the camera view.
@@ -668,22 +677,16 @@ function CenteredImage(game, key) {
 
     this.name = 'CenteredImage';
     this.anchor.set(0.5);
+    this.fixedToCamera = true;
 
-    this._resize();
-    this.game.scale.onSizeChange.add(this._resize, this);
+    // Center it.
+    this.resize();
 }
 
 CenteredImage.prototype = Object.create(Phaser.Image.prototype);
 CenteredImage.prototype.constructor = CenteredImage;
 
-CenteredImage.prototype._resize = function() {
-    centerToCamera(this.game, this);
-};
-
-CenteredImage.prototype.destroy = function() {
-    this.game.scale.onSizeChange.remove(this._resize, this);
-    Phaser.Image.prototype.destroy.call(this);
-};
+CenteredImage.prototype.resize = _resize;
 
 /**
  * Text that is always centered in the camera view.
@@ -693,37 +696,63 @@ function CenteredText(game, text, style) {
 
     this.name = '"' + text + '"';
     this.anchor.set(0.5);
+    this.fixedToCamera = true;
 
-    this._resize();
-    this.game.scale.onSizeChange.add(this._resize, this);
+    // Center it.
+    this.resize();
 }
 
 CenteredText.prototype = Object.create(Phaser.Text.prototype);
 CenteredText.prototype.constructor = CenteredText;
 
-CenteredText.prototype._resize = function() {
-    centerToCamera(this.game, this);
-};
-
-CenteredText.prototype.destroy = function() {
-    this.game.scale.onSizeChange.remove(this._resize, this);
-
-    Phaser.Text.prototype.destroy.call(this);
-};
+CenteredText.prototype.resize = _resize;
 
 /**
  * Text that is scaled and always centered in the camera view.
  */
 function ScaledCenteredText(game, text, style) {
+    style = Phaser.Utils.extend({}, style);
+    style.fontSize = this._getFontSize(game, text);
     CenteredText.call(this, game, text, style);
 }
 
 ScaledCenteredText.prototype = Object.create(CenteredText.prototype);
 ScaledCenteredText.prototype.constructor = ScaledCenteredText;
 
-ScaledCenteredText.prototype._resize = function() {
-    scaleTextToFit(this.game, this);
-    CenteredText.prototype._resize.call(this);
+/**
+ * Returns an appropriate font size, based on the game width and the text length.
+ */
+ScaledCenteredText.prototype._getFontSize = function(game, text) {
+    // The font size specifies height for a character, so approximate the width.
+    // fontSize = charHeight ~ charWidth * 4/3 ~ game.width / textWidth * 4/3
+    return (game.width / text.length * 4/3) + 'px';
+};
+
+ScaledCenteredText.prototype._scaleTextToFit = function() {
+    // Force the text to always fit the screen (factor * game.width/height).
+    // Use text.texture, since text.width/height takes into account scaling.
+    // Notice the factor for text.height. Height measuring for text is not
+    // accurate, so Phaser ends up with a height larger than the actual one.
+    scaleToFit(this.scale,
+               Math.round(0.9 * this.game.width),
+               Math.round(0.9 * this.game.height),
+               this.texture.width,
+               Math.round(this.texture.height / 1.4));
+    // Undo the world/camera scaling that will be applied by Phaser.
+    // Note: World and camera scaling values are the same in Phaser.
+    Phaser.Point.divide(this.scale, this.game.camera.scale, this.scale);
+};
+
+ScaledCenteredText.prototype.resize = function() {
+    var style = getWordStyle(this.text),
+        scale = this.game.camera.scale;
+
+    this.fontSize = this._getFontSize(this.game, this.text);
+    this.setShadow(
+            style.shadowOffsetX * scale.x, style.shadowOffsetY * scale.y,
+            style.shadowColor, style.shadowBlur * scale.x);
+    this._scaleTextToFit();
+    centerFixedToCamera(this.game.camera, this);
 };
 
 
@@ -748,17 +777,28 @@ function newOverlay(game, color) {
  *
  * @param {Array.<string>} text - The message (word/phrase) to display.
  * @param {object} [options] - A customization object.
- * @param {number} [options.initDelay=0] - How long to wait before starting.
- * @param {number} [options.nextDelay=550] - How long to wait before showing the next word.
- * @param {number} [options.finalDelay=options.nextDelay] - How long to wait before showing the message again.
- * @param {number} [options.duration=450] - How long the animation for each word will last.
- * @param {number} [options.flashOnDuration=25] - How long it will take to turn the flash on.
- * @param {number} [options.flashOffDuration=400] - How long it will take to turn the flash off.
- * @param {number} [options.flashTint=0xFFFFFF] - A tint to change the color of the flash.
- * @param {boolean} [options.repeat=false] - Repeat the announcement forever.
- * @param {boolean} [options.overlay=false] - Add a layer between the game and the text.
- * @param {string}  [options.overlayColor='dark'] - 'light' or 'dark' shade.
- * @param {function} [options.onComplete=noop] - An action to perform after the announcer is done.
+ * @param {number} [options.initDelay=0] -
+ *      How long to wait before starting.
+ * @param {number} [options.nextDelay=550] -
+ *      How long to wait before showing the next word.
+ * @param {number} [options.finalDelay=options.nextDelay] -
+ *      How long to wait before showing the message again.
+ * @param {number} [options.duration=450] -
+ *      How long the animation for each word will last.
+ * @param {number} [options.flashOnDuration=25] -
+ *      How long it will take to turn the flash on.
+ * @param {number} [options.flashOffDuration=400] -
+ *      How long it will take to turn the flash off.
+ * @param {number} [options.flashTint=0xFFFFFF] -
+ *      A tint to change the color of the flash.
+ * @param {boolean} [options.repeat=false] -
+ *      If true, repeat the message forever.
+ * @param {boolean} [options.overlay=false] -
+ *      Add a layer between the game and the text.
+ * @param {string} [options.overlayColor='dark'] -
+ *      Specify a 'light' or 'dark' shade for the overlay.
+ * @param {function} [options.onComplete=noop] -
+ *      A function to call once the announcer is done.
  */
 function Announcer(game, text, options) {
     this.options = Phaser.Utils.extend({}, Announcer.defaults, options);
@@ -767,23 +807,27 @@ function Announcer(game, text, options) {
     }
 
     if (this.options.overlay) {
-        this.overlay = game.add.existing(newOverlay(game, this.options.overlayColor));
-        this.overlay.name = 'Announcer overlay';
+        this._overlay = game.add.existing(
+            newOverlay(game, this.options.overlayColor));
+        this._overlay.name = 'Announcer overlay';
     } else {
         // Add a null object.
-        this.overlay = game.add.image(0, 0, null);
+        this._overlay = new CenteredImage(game);
+        this._overlay.name = 'Announcer null overlay';
     }
 
-    this.flash = game.add.existing(new CenteredImage(
+    this._flash = game.add.existing(new CenteredImage(
         game, game.cache.getBitmapData(CACHE.KEY.FLASH)));
-    this.flash.name = 'Announcer flash';
-    this.flash.alpha = 0;
-    this.flash.tint = this.options.flashTint;
+    this._flash.name = 'Announcer flash';
+    this._flash.alpha = 0;
+    this._flash.tint = this.options.flashTint;
 
-    this.textGroup = Announcer._addTextGroup(game, text);
+    this._textGroup = Announcer._addTextGroup(game, text);
+
+    this._textTween = null;
+    this._timer = null;
 
     // Handy references.
-    this.game = game;
     this.add = game.add;
     this.time = game.time;
 }
@@ -802,28 +846,53 @@ Announcer.defaults = {
     onComplete: noop
 };
 
-Announcer.prototype._destroy = function() {
-    this.textGroup.destroy();
-    this.flash.destroy();
-    this.overlay.destroy();
+Announcer.scaleFactor = 1.06;
+
+Announcer.prototype.resize = function() {
+    // Do nothing if the announcer has finished.
+    if (this._flash === null) return;
+
+    this._overlay.resize();
+    this._flash.resize();
+    this._textGroup.forEach(function resize(text) {
+        text.resize();
+    });
+    if (DEBUG) log('Resized announcer.');
+};
+
+/**
+ * Stops the announcer and destroys all its components.
+ */
+Announcer.prototype.stop = function() {
+    this.time.events.remove(this._timer);   // May be null.
+    this._textTween.stop();
+
+    // Tweens are removed from sprites/images automatically.
+    this._textGroup.destroy();
+    this._flash.destroy();
+    this._overlay.destroy();
+
+    this._textGroup = null;
+    this._flash = null;
+    this._overlay = null;
 };
 
 Announcer.prototype._flashCamera1 = function() {
-    this.add.tween(this.flash).to({
+    this.add.tween(this._flash).to({
         alpha: 0
     }, this.options.flashOffDuration, Phaser.Easing.Quadratic.Out, AUTOSTART);
 };
 
 Announcer.prototype._flashCamera0 = function() {
-    this.add.tween(this.flash).to({
+    this.add.tween(this._flash).to({
         alpha: 1
     }, this.options.flashOnDuration, Phaser.Easing.Quadratic.In, AUTOSTART)
         .onComplete.addOnce(this._flashCamera1, this);
 };
 
 Announcer.prototype._next = function() {
-    this.textGroup.cursor.kill();
-    this.textGroup.next();
+    this._textGroup.cursor.kill();
+    this._textGroup.next();
     this._announce();
 };
 
@@ -831,45 +900,52 @@ Announcer.prototype._repeat = function() {
     if (this.options.repeat) {
         this._next();
     } else {
-        this._destroy();
+        this.stop();
         this.options.onComplete.call(this);
     }
 };
 
 Announcer.prototype._announceNext = function() {
-    if (this.textGroup.cursorIndex < this.textGroup.length - 1) {
-        this.time.events.add(this.options.nextDelay, this._next, this);
+    if (this._textGroup.cursorIndex < this._textGroup.length - 1) {
+        this._timer = this.time.events.add(this.options.nextDelay, this._next, this);
     } else {
-        this.time.events.add(this.options.finalDelay, this._repeat, this);
+        this._timer = this.time.events.add(this.options.finalDelay, this._repeat, this);
     }
 };
 
 Announcer.prototype._announce = function() {
-    var diff = 0.07, text, tween;
+    var text = this._textGroup.cursor,
+        oldScaleX = text.scale.x,
+        oldScaleY = text.scale.y;
 
-    text = this.textGroup.cursor;
-    // Reset scaling from previous operations.
-    text.scale.add(diff, diff);
+    // Set the new scale that will be undone by the tween.
+    text.scale.multiply(Announcer.scaleFactor, Announcer.scaleFactor);
     text.revive();
 
-    tween = this.add.tween(text.scale);
     // DON'T tween the font size, since it will have to redraw the text sprite!
-    tween.to({
-        x: '-' + diff,
-        y: '-' + diff,
-    }, this.options.duration, Phaser.Easing.Quadratic.Out);
-    tween.onStart.addOnce(this._flashCamera0, this);
-    tween.onComplete.addOnce(this._announceNext, this);
-    tween.start();
+    this._textTween = this.add.tween(text.scale).to({
+        x: oldScaleX,
+        y: oldScaleY,
+    }, this.options.duration, Phaser.Easing.Quadratic.Out, !AUTOSTART);
+    this._textTween.onStart.addOnce(this._flashCamera0, this);
+    this._textTween.onComplete.addOnce(this._announceNext, this);
+    this._textTween.start();
 };
 
+/**
+ * Displays the message to the player.
+ * @return {Announcer} this announcer, for possible method chaining.
+ */
 Announcer.prototype.announce = function() {
-    this.time.events.add(this.options.initDelay, this._announce, this);
+    // NOTE: Use a timer to delay the first tween (instead of the tween delay arg)!
+    // This will make sure that the first word will be displayed even when lagging.
+    this._timer = this.time.events.add(this.options.initDelay, this._announce, this);
+    return this;
 };
 
 Announcer._addTextGroup = function(game, words) {
-    var defaultStyle = Supercold.style.superhot,
-        group, text, i, word, wordStyle, style;
+    var scale = game.camera.scale,
+        group, text, i, word, style;
 
     group = game.add.group();
     group.name = 'Text group: "' + words + '"';
@@ -878,18 +954,12 @@ Announcer._addTextGroup = function(game, words) {
     // https://phaser.io/docs/2.6.2/Phaser.Sprite.html#cameraOffset
     for (i = 0; i < words.length; ++i) {
         word = words[i];
-        // In case of phrase instead of word, use the first word as index.
-        wordStyle = Supercold.wordStyles[word.split(' ')[0]];
-        if (wordStyle) {
-            style = Phaser.Utils.extend({}, defaultStyle, wordStyle);
-        } else {
-            style = defaultStyle;
-        }
+        style = getWordStyle(word);
 
         text = group.add(new ScaledCenteredText(game, word, style));
         text.setShadow(
-            style.shadowOffsetX, style.shadowOffsetY,
-            style.shadowColor, style.shadowBlur);
+            style.shadowOffsetX * scale.x, style.shadowOffsetY * scale.y,
+            style.shadowColor, style.shadowBlur * scale.x);
         // Initially invisible.
         text.kill();
     }
@@ -938,21 +1008,18 @@ function hideTip() {
 /***************************** Scalable State *****************************/
 
 /**
- * A state that supports a scalable camera.
+ * A state that supports a scalable viewport.
+ * The currect scale factor is the same as world.scale
+ * (which in turn is the same as camera.scale in Phaser).
  */
-Supercold._ScalableState = function(game) {
-    var width = Supercold.world.width + PADDING.width*2,
-        height = Supercold.world.height + PADDING.height*2;
-
-    this.bounds = new Phaser.Rectangle(
-        -Math.round(width / 2), -Math.round(height / 2), width, height);
-};
+Supercold._ScalableState = function(game) {};
 
 /**
  * Sets the world size.
  */
 Supercold._ScalableState.prototype._setWorldBounds = function() {
-    var width = this.bounds.width, height = this.bounds.height;
+    var width = Supercold.world.width + PADDING.width*2,
+        height = Supercold.world.height + PADDING.height*2;
 
     // The world is a large fixed size space with (0, 0) in the center.
     this.world.setBounds(
@@ -961,44 +1028,416 @@ Supercold._ScalableState.prototype._setWorldBounds = function() {
 };
 
 /**
- * Sets the camera scale so that the player sees about the same portion of the
+ * Sets the world scale so that the player sees about the same portion of the
  * playing field. The strategy selected scales the game so as to fill the screen,
  * but it will crop some of the top/bottom or left/right sides of the playing field.
+ * Note: World and Camera scaling values are the same in Phaser!
  */
-Supercold._ScalableState.prototype._setCameraScale = function(width, height) {
-    scaleToFill(this.camera.scale, width, height);
-    if (DEBUG) log('Set camera scale to', this.camera.scale);
+Supercold._ScalableState.prototype._setWorldScale = function(width, height) {
+    scaleToFill(this.world.scale, width, height);
+    if (DEBUG) log('Set world scale to', this.world.scale);
 };
 
 /**
- *
+ * Sets all the necessary sizes and scale factors for our world.
  */
 Supercold._ScalableState.prototype.setScaling = function() {
     // Note: Don't use Phaser.ScaleManager.onSizeChange, since the callback
     // may be triggered multiple times. Phaser.State.resize works better.
+    // https://phaser.io/docs/2.6.2/Phaser.ScaleManager.html#onSizeChange
     this._setWorldBounds();
-    this._setCameraScale(this.game.width, this.game.height);
+    this._setWorldScale(this.game.width, this.game.height);
     if (DEBUG) log('Set scaling.');
 };
 
 /**
- * Since our game is set to Scalemode 'RESIZE', this method will be called to
- * handle resizing. Subclasses of the ScalableState will inherit this method
- * and will, thus, be able to handle resizing.
+ * Since our game is set to Scalemode 'RESIZE', this method will be called
+ * automatically to handle resizing. Since subclasses of the ScalableState
+ * inherit this method, they are able to handle resizing, too.
  *
  * @param {number} width - the new width
  * @param {number} height - the new height
  * @override
  */
 Supercold._ScalableState.prototype.resize = function(width, height) {
-    this._setCameraScale(width, height);
+    this._setWorldScale(width, height);
     if (DEBUG) log('Resized game.');
 };
 
-Supercold._ScalableState.prototype.addBackground = function() {
-    var background = this.add.image(0, 0, this.cache.getBitmapData(CACHE.KEY.BG));
+/**
+ * Rescales the sprite given to account for the scale of the world.
+ */
+Supercold._ScalableState.prototype.rescale = function(sprite) {
+    sprite.scale.set(1 / this.world.scale.x, 1 / this.world.scale.y);
+};
 
+/******************************* Base State *******************************/
+
+/**
+ * State used as a base class for almost all other game states.
+ * Provides methods for scaling the game, handling drawing of all sprites
+ * and redrawing when resizing, debugging and other common functionality.
+ */
+Supercold._BaseState = function(game) {
+    Supercold._ScalableState.call(this, game);
+};
+
+Supercold._BaseState.prototype = Object.create(Supercold._ScalableState.prototype);
+Supercold._BaseState.prototype.constructor = Supercold._BaseState;
+
+/**
+ * Returns the smallest even integer greater than or equal to the number.
+ */
+function even(n) {
+    n = Math.ceil(n);
+    return n + n%2;
+}
+
+/**
+ * Draws a circle in the context specified.
+ */
+function circle(ctx, x, y, radius) {
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.closePath();
+}
+
+/**
+ * Draws a line in the context specified.
+ */
+function line(ctx, x1, y1, x2, y2) {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+}
+
+function addColorStops(grd, colorStops) {
+    var i, colorStop;
+
+    for (i = 0; i < colorStops.length; ++i) {
+        colorStop = colorStops[i];
+        grd.addColorStop(colorStop.stop, colorStop.color);
+    }
+    return grd;
+}
+
+function createLinearGradient(ctx, x1, y1, x2, y2, colorStops) {
+    return addColorStops(
+        ctx.createLinearGradient(x1, y1, x2, y2), colorStops);
+}
+
+function createRadialGradient(ctx, x1, y1, r1, x2, y2, r2, colorStops) {
+    return addColorStops(
+        ctx.createRadialGradient(x1, y1, r1, x2, y2, r2), colorStops);
+}
+
+/**
+ * Creates a new Phaser.BitmapData object and adds it to the cache.
+ * @param {number} width - The width of the BitmapData object.
+ * @param {number} height - The height of the BitmapData object.
+ * @param {string} key - The asset key for adding it in the cache.
+ * @return {Phaser.BitmapData} - The new Phaser.BitmapData object.
+ */
+Supercold._BaseState.prototype.makeBitmapData = function(width, height, key) {
+    var addToCache = true;
+
+    // NOTE: To avoid single-pixel jitters on mobile devices, it is strongly
+    // recommended to use Sprite sizes that are even on both axis, so warn
+    // if they are not!
+    if (DEBUG && (width % 2 === 1 || height % 2 === 1)) {
+        warn('Sprite with odd dimension!');
+    }
+    // 'add.bitmapData' does the same thing as 'make.bitmapData',
+    // i.e. it doesn't actually add the bitmapData object to the world.
+    // (BitmapData's are Game Objects and don't live on the display list.)
+    return this.make.bitmapData(width, height, key, addToCache);
+};
+
+/**
+ * Returns a new Phaser.BitmapData object or an existing one from cache.
+ * @param {number} width - The new width of the BitmapData object.
+ * @param {number} height - The new height of the BitmapData object.
+ * @param {string} key - The asset key for searching or adding in the cache.
+ * @return {Phaser.BitmapData} - The Phaser.BitmapData object.
+ */
+Supercold._BaseState.prototype._getBitmapData = function(width, height, key) {
+    var bmd;
+
+    // Resizing or creating from scratch?
+    if (this.cache.checkBitmapDataKey(key)) {
+        bmd = this.cache.getBitmapData(key);
+        bmd.resize(width, height);
+    } else {
+        bmd = this.makeBitmapData(width, height, key);
+    }
+    return bmd;
+};
+
+Supercold._BaseState.prototype._makeLiveEntityBitmap = function(style, key) {
+    var player = Supercold.player, width, bmd, ctx;
+
+    function drawNozzle(ctx) {
+        // Note the fix values.
+        ctx.translate(-(style.lineWidth/2 + 0.13), -(style.lineWidth/2 + 0.12));
+        ctx.beginPath();
+        ctx.moveTo(0, player.radius);
+        ctx.lineTo(player.radius, player.radius);
+        ctx.lineTo(player.radius, 0);
+    }
+
+    // Same width and height.
+    // Note the slack value to account for the shadow blur.
+    width = player.radius*2 + (2/3 * player.radius) + style.shadowBlur;
+    width = even(width * this.world.scale.x);
+    bmd = this._getBitmapData(width, width, key);
+    ctx = bmd.ctx;
+
+    ctx.fillStyle = style.color;
+    ctx.strokeStyle = style.strokeStyle;
+    ctx.lineWidth = style.lineWidth;
+    ctx.shadowOffsetX = style.shadowOffsetX * this.world.scale.x;
+    ctx.shadowOffsetY = style.shadowOffsetY * this.world.scale.y;
+    ctx.shadowBlur = style.shadowBlur * this.world.scale.x;
+    ctx.lineCap = ctx.lineJoin = 'round';
+
+    // Start from the center.
+    ctx.translate(bmd.width / 2, bmd.height / 2);
+    // Rotate so that the entity will point to the right.
+    ctx.rotate(-Math.PI / 4);
+    ctx.scale(this.world.scale.x, this.world.scale.y);
+
+    ctx.save();
+        ctx.shadowColor = style.shadowColor;
+        ctx.save();
+            // Draw the nozzle.
+            drawNozzle(ctx);
+            ctx.fill();
+            // Draw the nozzle outline (twice to make the shadow stronger).
+            ctx.stroke();
+            ctx.stroke();
+        ctx.restore();
+        // Draw the body (more than once to make the shadow stronger).
+        circle(ctx, 0, 0, player.radius);
+        ctx.fill();
+        // Draw the outline a little smaller to account for the line width.
+        circle(ctx, 0, 0, player.radius - (style.lineWidth / 2));
+        ctx.stroke();
+    ctx.restore();
+    // Draw the nozzle one last time to cover the shadow in the joint areas.
+    drawNozzle(ctx);
+    ctx.stroke();
+};
+
+Supercold._BaseState.prototype._makePlayerBitmap = function() {
+    this._makeLiveEntityBitmap(Supercold.style.player, CACHE.KEY.PLAYER);
+};
+
+Supercold._BaseState.prototype._makeBotBitmap = function() {
+    this._makeLiveEntityBitmap(Supercold.style.bot, CACHE.KEY.BOT);
+};
+
+Supercold._BaseState.prototype._makeBulletBitmap = function() {
+    var bullet = Supercold.bullet,
+        scaledWidth = bullet.width * this.world.scale.x,
+        scaledHeight = bullet.height * this.world.scale.y,
+        evenedWidth = even(scaledWidth),
+        evenedHeight = even(scaledHeight),
+        bmd = this._getBitmapData(evenedWidth, evenedHeight, CACHE.KEY.BULLET),
+        ctx = bmd.ctx;
+
+    // In contrast to the other bitmaps, we don't keep the bullet perfectly
+    // proportional to the world scale. This helped with some centering issues.
+
+    ctx.fillStyle = Supercold.style.bullet.color;
+    ctx.lineCap = ctx.lineJoin = 'round';
+
+    // Draw the body.
+    bmd.rect(0, 0, bullet.bodyLen * this.world.scale.x, evenedHeight);
+    // Draw the tip.
+    // For some reason, this needs to be shifted left by 1 pixel.
+    ctx.translate((bullet.bodyLen - 1) * this.world.scale.x, 0);
+    ctx.save();
+        ctx.translate(0, evenedHeight / 2);
+        // Make the tip pointier.
+        ctx.scale(2, 1);
+        ctx.beginPath();
+        ctx.arc(0, 0, evenedHeight / 2, 3 * Math.PI/2, Math.PI/2);
+        ctx.fill();
+    ctx.restore();
+    // Draw the mark.
+    ctx.fillStyle = Supercold.style.bullet.markColor;
+    bmd.rect(0, 0, 1 * this.world.scale.x, evenedHeight);
+};
+
+Supercold._BaseState.prototype._makeBulletTrailBitmap = function() {
+    var style = Supercold.style.trail,
+        scaledWidth = style.x2 * this.world.scale.x,
+        scaledheight = Supercold.bullet.height * this.world.scale.y,
+        evenedWidth = even(scaledWidth),
+        evenedHeight = even(scaledheight),
+        bmd = this._getBitmapData(evenedWidth, evenedHeight, CACHE.KEY.TRAIL),
+        ctx = bmd.ctx;
+
+    // Shift the trail to account for rounding up and center it vertically.
+    ctx.translate((evenedWidth - scaledWidth) / 2, evenedHeight / 2);
+
+    ctx.scale(this.world.scale.x, this.world.scale.y);
+    ctx.strokeStyle = createLinearGradient(
+        ctx, style.x1, style.y1, style.x2, style.y2, style.colorStops);
+    // Make it a little thinner. 2 space units seem best.
+    ctx.lineWidth = Supercold.bullet.height - 2;
+    ctx.lineCap = 'round';
+    ctx.shadowOffsetX = style.shadowOffsetX * this.world.scale.x;
+    ctx.shadowOffsetY = style.shadowOffsetY * this.world.scale.y;
+    ctx.shadowBlur = style.shadowBlur * this.world.scale.x;
+    ctx.shadowColor = style.shadowColor;
+
+    // Note the offsets on the x-axis, so as to leave space for the round caps.
+    line(ctx, style.x1 + 2, 0, style.x2 - 4, 0);
+};
+
+Supercold._BaseState.prototype._makeBackgroundBitmap = function() {
+    var width = Supercold.world.width,
+        height = Supercold.world.height,
+        paddedWidth = width + PADDING.width*2,
+        paddedHeight = height + PADDING.height*2,
+        skewFactor = Math.tan(Supercold.style.lines.angle),
+        scaledWidth = even(paddedWidth * this.world.scale.x),
+        scaledHeight = even(paddedHeight * this.world.scale.y),
+        bmd = this._getBitmapData(scaledWidth, scaledHeight, CACHE.KEY.BG),
+        ctx = bmd.ctx, i;
+
+    // Draw background colors. Dark padded area and lighter inside space.
+    ctx.fillStyle = Supercold.style.background.darkColor;
+    ctx.fillRect(0, 0, scaledWidth, scaledHeight);
+    ctx.scale(this.world.scale.x, this.world.scale.y);
+    ctx.fillStyle = Supercold.style.background.lightColor;
+    ctx.fillRect(PADDING.width, PADDING.height, width, height);
+
+    // Draw blurred lines. (I know you want it. #joke -.-')
+    ctx.save();
+    ctx.transform(1, 0, -skewFactor, 1, 0, 0);
+    ctx.lineWidth = Supercold.style.lines.lineWidth;
+    ctx.strokeStyle = Supercold.style.lines.color;
+    ctx.shadowOffsetX = Supercold.style.lines.shadowOffsetX * this.world.scale.x;
+    ctx.shadowOffsetY = Supercold.style.lines.shadowOffsetY * this.world.scale.y;
+    ctx.shadowBlur = Supercold.style.lines.shadowBlur * this.world.scale.x;
+    ctx.shadowColor = Supercold.style.lines.shadowColor;
+    ctx.beginPath();
+    for (i = 0; i <= paddedWidth + (paddedHeight / skewFactor); i += 8) {
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, paddedHeight);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.shadowOffsetX = Supercold.style.grid.shadowOffsetX * this.world.scale.x;
+    ctx.shadowOffsetY = Supercold.style.grid.shadowOffsetY * this.world.scale.y;
+    ctx.shadowBlur = Supercold.style.grid.shadowBlur * this.world.scale.x;
+
+    // Draw horizontal lines
+    ctx.save();
+    // Make lines sharp!
+    // http://diveintohtml5.info/canvas.html#paths
+    ctx.translate(0, 0.5);
+    ctx.translate(0, PADDING.height);
+    // inside world
+    ctx.strokeStyle = Supercold.style.grid.color1;
+    ctx.shadowColor = Supercold.style.grid.shadowColor1;
+    ctx.beginPath();
+    for (i = 0; i <= height; i += Supercold.cell.height) {
+        ctx.moveTo(0, i);
+        ctx.lineTo(paddedWidth, i);
+    }
+    ctx.stroke();
+    // in outer area
+    ctx.strokeStyle = Supercold.style.grid.colorOuter;
+    ctx.shadowColor = Supercold.style.grid.shadowColorOuter;
+    ctx.beginPath();
+    for (i = 0; i <= PADDING.height; i += Supercold.cell.height) {
+        ctx.moveTo(0, -i);
+        ctx.lineTo(paddedWidth, -i);
+        ctx.moveTo(0, height + i);
+        ctx.lineTo(paddedWidth, height + i);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // Draw vertical lines
+    ctx.save();
+    // Make lines sharp!
+    // http://diveintohtml5.info/canvas.html#paths
+    ctx.translate(0.5, 0);
+    ctx.translate(PADDING.width, 0);
+    // inside world
+    ctx.strokeStyle = Supercold.style.grid.color2;
+    ctx.shadowColor = Supercold.style.grid.shadowColor2;
+    ctx.beginPath();
+    for (i = 0; i <= width; i += Supercold.cell.width) {
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, paddedHeight);
+    }
+    ctx.stroke();
+    // in outer area
+    ctx.strokeStyle = Supercold.style.grid.colorOuter;
+    ctx.shadowColor = Supercold.style.grid.shadowColorOuter;
+    ctx.beginPath();
+    for (i = 0; i <= PADDING.width; i += Supercold.cell.width) {
+        ctx.moveTo(-i, 0);
+        ctx.lineTo(-i, paddedHeight);
+        ctx.moveTo(width + i, 0);
+        ctx.lineTo(width + i, paddedHeight);
+    }
+    ctx.stroke();
+    ctx.restore();
+};
+
+Supercold._BaseState.prototype._makeFlashBitmap = function() {
+    var width = even(NATIVE_WIDTH * this.world.scale.x),
+        height = even(NATIVE_HEIGHT * this.world.scale.y),
+        centerX = width / 2, centerY = height / 2,
+        radius = Math.min(centerX, centerY),
+        bmd = this._getBitmapData(width, height, CACHE.KEY.FLASH),
+        ctx = bmd.ctx;
+
+    // Create an oval flash.
+    ctx.translate(centerX, 0);
+    ctx.scale(2, 1);
+    ctx.translate(-centerX, 0);
+
+    ctx.fillStyle = createRadialGradient(
+        ctx, centerX, centerY, 0, centerX, centerY, radius,
+        Supercold.style.flash.colorStops);
+    ctx.fillRect(0, 0, width, height);
+};
+
+Supercold._BaseState.prototype._makeOverlayBitmaps = function() {
+    var width = even(NATIVE_WIDTH * this.world.scale.x),
+        height = even(NATIVE_HEIGHT * this.world.scale.y),
+        bmd;
+
+    bmd = this._getBitmapData(width, height, CACHE.KEY.OVERLAY_DARK);
+    bmd.rect(0, 0, bmd.width, bmd.height, Supercold.style.overlay.darkColor);
+    bmd = this._getBitmapData(width, height, CACHE.KEY.OVERLAY_LIGHT);
+    bmd.rect(0, 0, bmd.width, bmd.height, Supercold.style.overlay.lightColor);
+};
+
+Supercold._BaseState.prototype.makeBitmaps = function() {
+    this._makePlayerBitmap();
+    this._makeBotBitmap();
+    this._makeBulletBitmap();
+    this._makeBulletTrailBitmap();
+    this._makeBackgroundBitmap();
+    this._makeFlashBitmap();
+    this._makeOverlayBitmaps();
+};
+
+
+Supercold._BaseState.prototype.addBackground = function() {
+    var background = this.add.image(0, 0, this.cache.getBitmapData(CACHE.KEY.BG));
     background.anchor.set(0.5);
+    background.scale.set(1 / this.world.scale.x, 1 / this.world.scale.y);
     return background;
 };
 
@@ -1006,7 +1445,7 @@ Supercold._ScalableState.prototype.addBackground = function() {
  * Shows lots of debug info about various Phaser objects on the screen.
  * @param {Phaser.Sprite} [sprite] - An optional sprite to show debug info for.
  */
-Supercold._ScalableState.prototype.showDebugInfo = function(sprite) {
+Supercold._BaseState.prototype.showDebugInfo = function(sprite) {
     if (sprite) {
         this.game.debug.spriteBounds(sprite);
         this.game.debug.spriteInfo(sprite, DEBUG_POSX, 32);
@@ -1016,6 +1455,33 @@ Supercold._ScalableState.prototype.showDebugInfo = function(sprite) {
     this.game.debug.inputInfo(DEBUG_POSX, 280);
     this.game.debug.pointer(this.input.activePointer);
     this.game.debug.text('DEBUG: ' + DEBUG, DEBUG_POSX, this.game.height-16);
+};
+
+
+/**
+ * Since our game is set to Scalemode 'RESIZE', this method will be called
+ * automatically to handle resizing. Since subclasses of the BaseState
+ * inherit this method, they are able to handle resizing, too.
+ *
+ * @param {number} width - the new width
+ * @param {number} height - the new height
+ * @override
+ */
+Supercold._BaseState.prototype.resize = function(width, height) {
+    Supercold._ScalableState.prototype.resize.call(this, width, height);
+    // Create new bitmaps for our new resolution. This will keep them sharp!
+    this.makeBitmaps();
+    if (DEBUG) log('Resized bitmaps.');
+};
+
+/**
+ * Used here for debugging purposes.
+ * Subclasses may override this to render more info.
+ */
+Supercold._BaseState.prototype.render = function() {
+    if (DEBUG) {
+        this.showDebugInfo();
+    }
 };
 
 /******************************* Boot State *******************************/
@@ -1064,234 +1530,15 @@ Supercold.Boot.prototype.create = function() {
 
 /***************************** Preloader State ****************************/
 
-function circle(ctx, x, y, radius) {
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.closePath();
-}
-
-function line(ctx, x1, y1, x2, y2) {
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-}
-
 /**
  * State used for loading or creating any assets needed in the game.
  */
 Supercold.Preloader = function(game) {
-    Supercold._ScalableState.call(this, game);
+    Supercold._BaseState.call(this, game);
 };
 
-Supercold.Preloader.prototype = Object.create(Supercold._ScalableState.prototype);
+Supercold.Preloader.prototype = Object.create(Supercold._BaseState.prototype);
 Supercold.Preloader.prototype.constructor = Supercold.Preloader;
-
-Supercold.Preloader.prototype._makeLiveEntityBitmap = function(style, key) {
-    var player = Supercold.player, width, bmd, ctx;
-
-    // Same width and height.
-    width = (player.radius + player.sideLen) * 2;
-    bmd = makeBitmapData(this, width, width, key);
-    ctx = bmd.ctx;
-
-    ctx.fillStyle = style.color;
-    ctx.strokeStyle = style.strokeStyle;
-    ctx.lineWidth = style.lineWidth;
-    ctx.shadowOffsetX = style.shadowOffsetX;
-    ctx.shadowOffsetY = style.shadowOffsetY;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    // Draw the circle.
-    ctx.translate(bmd.width / 2, bmd.height / 2);
-    ctx.save();
-    ctx.shadowColor = style.shadowColor;
-    ctx.shadowBlur = style.shadowBlur;
-    circle(ctx, 0, 0, player.radius);
-    ctx.fill();
-    // Draw the outline a little smaller, so as not to cover the shadow.
-    circle(ctx, 0, 0, player.radius - (style.lineWidth / 2));
-    ctx.stroke();
-    ctx.restore();
-
-    // Draw the nozzle outline.
-    ctx.translate(player.radius - Math.round(player.sideLen / 1.68), 0);
-    ctx.rotate(-Math.PI / 2);
-    ctx.beginPath();
-    ctx.moveTo(-player.sideLen, 0);
-    ctx.lineTo(0, player.sideLen);
-    ctx.lineTo(player.sideLen, 0);
-    ctx.stroke();
-    // Draw the nozzle.
-    ctx.globalCompositeOperation = 'destination-over';
-    ctx.shadowColor = style.shadowColor;
-    ctx.shadowBlur = style.shadowBlur;
-    ctx.fill();
-};
-
-Supercold.Preloader.prototype._makePlayerBitmap = function() {
-    this._makeLiveEntityBitmap(Supercold.style.player, CACHE.KEY.PLAYER);
-};
-
-Supercold.Preloader.prototype._makeBotBitmap = function() {
-    this._makeLiveEntityBitmap(Supercold.style.bot, CACHE.KEY.BOT);
-};
-
-Supercold.Preloader.prototype._makeBulletBitmap = function() {
-    var bullet = Supercold.bullet,
-        bmd = makeBitmapData(this, bullet.width, bullet.height, CACHE.KEY.BULLET),
-        ctx = bmd.ctx;
-
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.fillStyle = Supercold.style.bullet.color;
-
-    bmd.rect(0, 0, bullet.bodyLen, bullet.height);
-
-    ctx.translate(bullet.bodyLen, bullet.tipRadius);
-    // Make the tip pointier.
-    ctx.scale(2, 1);
-    ctx.beginPath();
-    ctx.arc(0, 0, bullet.tipRadius, 3/2 * Math.PI, Math.PI / 2);
-    ctx.fill();
-};
-
-Supercold.Preloader.prototype._makeTrailBitmap = function() {
-    var style = Supercold.style.trail,
-        height = Supercold.bullet.height,
-        centerY = (height - 1) / 2,
-        bmd = makeBitmapData(this, style.x2, height, CACHE.KEY.TRAIL),
-        ctx = bmd.ctx;
-
-    ctx.strokeStyle = createLinearGradient(
-        ctx, style.x1, style.y1, style.x2, style.y2, style.colorStops);
-    // Make it a little thinner.
-    ctx.lineWidth = height - 2;
-    ctx.lineCap = 'round';
-    ctx.shadowOffsetX = style.shadowOffsetX;
-    ctx.shadowOffsetY = style.shadowOffsetY;
-    ctx.shadowColor = style.shadowColor;
-    ctx.shadowBlur = style.shadowBlur;
-
-    // Note the offsets on the x-axis, so as to leave space for the round caps.
-    line(ctx, style.x1 + 4, centerY, style.x2 - 4, centerY);
-};
-
-Supercold.Preloader.prototype._makeBackgroundBitmap = function() {
-    var width = Supercold.world.width,
-        height = Supercold.world.height,
-        paddedWidth = Supercold.world.width + PADDING.width*2,
-        paddedHeight = Supercold.world.height + PADDING.height*2,
-        skewFactor = Math.tan(Supercold.style.lines.angle),
-        bmd = makeBitmapData(this, paddedWidth, paddedHeight, CACHE.KEY.BG),
-        ctx = bmd.ctx, i;
-
-    // Draw background colors. Dark padded area and lighter inside space.
-    ctx.fillStyle = Supercold.style.background.darkColor;
-    ctx.fillRect(0, 0, paddedWidth, paddedHeight);
-    ctx.fillStyle = Supercold.style.background.lightColor;
-    ctx.fillRect(PADDING.width, PADDING.height, width, height);
-
-    // Draw blurred lines. (I know you want it. #joke -.-')
-    ctx.save();
-    ctx.transform(1, 0, -skewFactor, 1, 0, 0);
-    ctx.lineWidth = Supercold.style.lines.lineWidth;
-    ctx.strokeStyle = Supercold.style.lines.color;
-    ctx.shadowOffsetX = Supercold.style.lines.shadowOffsetX;
-    ctx.shadowOffsetY = Supercold.style.lines.shadowOffsetY;
-    ctx.shadowColor = Supercold.style.lines.shadowColor;
-    ctx.shadowBlur = Supercold.style.lines.shadowBlur;
-    ctx.beginPath();
-    for (i = 0; i <= paddedWidth + (paddedHeight / skewFactor); i += 8) {
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i, paddedHeight);
-    }
-    ctx.stroke();
-    ctx.restore();
-
-    ctx.shadowOffsetX = Supercold.style.grid.shadowOffsetX;
-    ctx.shadowOffsetY = Supercold.style.grid.shadowOffsetY;
-    ctx.shadowBlur = Supercold.style.grid.shadowBlur;
-
-    // Draw horizontal lines
-    ctx.save();
-    ctx.translate(0, PADDING.height);
-    // inside world
-    ctx.strokeStyle = Supercold.style.grid.color1;
-    ctx.shadowColor = Supercold.style.grid.shadowColor1;
-    ctx.beginPath();
-    for (i = 0; i <= height; i += Supercold.cell.height) {
-        ctx.moveTo(0, i);
-        ctx.lineTo(paddedWidth, i);
-    }
-    ctx.stroke();
-    // in outer area
-    ctx.strokeStyle = Supercold.style.grid.colorOuter;
-    ctx.shadowColor = Supercold.style.grid.shadowColorOuter;
-    ctx.beginPath();
-    for (i = 0; i <= PADDING.height; i += Supercold.cell.height) {
-        ctx.moveTo(0, -i);
-        ctx.lineTo(paddedWidth, -i);
-        ctx.moveTo(0, height + i);
-        ctx.lineTo(paddedWidth, height + i);
-    }
-    ctx.stroke();
-    ctx.restore();
-
-    // Draw vertical lines
-    ctx.save();
-    ctx.translate(PADDING.width, 0);
-    // inside world
-    ctx.strokeStyle = Supercold.style.grid.color2;
-    ctx.shadowColor = Supercold.style.grid.shadowColor2;
-    ctx.beginPath();
-    for (i = 0; i <= width; i += Supercold.cell.width) {
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i, paddedHeight);
-    }
-    ctx.stroke();
-    // in outer area
-    ctx.strokeStyle = Supercold.style.grid.colorOuter;
-    ctx.shadowColor = Supercold.style.grid.shadowColorOuter;
-    ctx.beginPath();
-    for (i = 0; i <= PADDING.width; i += Supercold.cell.width) {
-        ctx.moveTo(-i, 0);
-        ctx.lineTo(-i, paddedHeight);
-        ctx.moveTo(width + i, 0);
-        ctx.lineTo(width + i, paddedHeight);
-    }
-    ctx.stroke();
-    ctx.restore();
-};
-
-Supercold.Preloader.prototype._makeFlashBitmap = function() {
-    var centerX = (NATIVE_WIDTH - 1) / 2,
-        centerY = (NATIVE_HEIGHT - 1) / 2,
-        radius = Math.min(centerX, centerY),
-        bmd = makeBitmapData(this, NATIVE_WIDTH, NATIVE_HEIGHT, CACHE.KEY.FLASH),
-        ctx = bmd.ctx;
-
-    // Create an oval flash.
-    ctx.translate(centerX, 0);
-    ctx.scale(2, 1);
-
-    ctx.translate(-centerX, 0);
-    ctx.fillStyle = createRadialGradient(
-        ctx, centerX, centerY, 0, centerX, centerY, radius,
-        Supercold.style.flash.colorStops);
-    ctx.fillRect(0, 0, NATIVE_WIDTH, NATIVE_HEIGHT);
-};
-
-Supercold.Preloader.prototype._makeOverlayBitmaps = function() {
-    var bmd;
-
-    bmd = makeBitmapData(this, NATIVE_WIDTH, NATIVE_HEIGHT, CACHE.KEY.OVERLAY_DARK);
-    bmd.rect(0, 0, bmd.width, bmd.height, Supercold.style.overlay.darkColor);
-    bmd = makeBitmapData(this, NATIVE_WIDTH, NATIVE_HEIGHT, CACHE.KEY.OVERLAY_LIGHT);
-    bmd.rect(0, 0, bmd.width, bmd.height, Supercold.style.overlay.lightColor);
-};
-
 
 Supercold.Preloader.prototype.preload = function() {
     if (DEBUG) {
@@ -1312,14 +1559,7 @@ Supercold.Preloader.prototype.create = function() {
 
     // Scaling should be specified first.
     this.setScaling();
-
-    this._makePlayerBitmap();
-    this._makeBotBitmap();
-    this._makeBulletBitmap();
-    this._makeTrailBitmap();
-    this._makeBackgroundBitmap();
-    this._makeFlashBitmap();
-    this._makeOverlayBitmaps();
+    this.makeBitmaps();
 };
 
 Supercold.Preloader.prototype.update = function() {
@@ -1330,10 +1570,12 @@ Supercold.Preloader.prototype.update = function() {
 /***************************** Main Menu State ****************************/
 
 Supercold.MainMenu = function(game) {
-    Supercold._ScalableState.call(this, game);
+    Supercold._BaseState.call(this, game);
+
+    this._announcer = null;
 };
 
-Supercold.MainMenu.prototype = Object.create(Supercold._ScalableState.prototype);
+Supercold.MainMenu.prototype = Object.create(Supercold._BaseState.prototype);
 Supercold.MainMenu.prototype.constructor = Supercold.MainMenu;
 
 Supercold.MainMenu.prototype.create = function() {
@@ -1346,7 +1588,7 @@ Supercold.MainMenu.prototype.create = function() {
     this.camera.bounds = null;
     this.camera.focusOn(this.world);
 
-    new Announcer(this.game, Supercold.texts.SUPERCOLD.split(' '), {
+    this._announcer = new Announcer(this.game, Supercold.texts.SUPERCOLD, {
         initDelay: 750,
         nextDelay: 1200,
         flashTint: 0x151515,
@@ -1357,22 +1599,21 @@ Supercold.MainMenu.prototype.create = function() {
     // We will transition to the next state through the DOM menu!
 };
 
-/**
- * Used here for debugging purposes.
- */
-Supercold.MainMenu.prototype.render = function() {
-    if (DEBUG) {
-        this.showDebugInfo();
-    }
+Supercold.MainMenu.prototype.resize = function(width, height) {
+    Supercold._BaseState.prototype.resize.call(this, width, height);
+    this._announcer.resize();
 };
 
 /******************************* Intro State ******************************/
 
 Supercold.Intro = function(game) {
-    Supercold._ScalableState.call(this, game);
+    Supercold._BaseState.call(this, game);
+
+    this._background = null;
+    this._announcer = null;
 };
 
-Supercold.Intro.prototype = Object.create(Supercold._ScalableState.prototype);
+Supercold.Intro.prototype = Object.create(Supercold._BaseState.prototype);
 Supercold.Intro.prototype.constructor = Supercold.Intro;
 
 Supercold.Intro.prototype.create = function() {
@@ -1381,11 +1622,13 @@ Supercold.Intro.prototype.create = function() {
     // Scaling should be specified first.
     this.setScaling();
 
+    this._background = this.addBackground();
+
     // Disable bounds checking for the camera, since it messes up centering.
     this.camera.bounds = null;
-    this.camera.follow(this.addBackground());
+    this.camera.follow(this._background);
 
-    new Announcer(this.game, Supercold.texts.SUPERCOLD.split(' '), {
+    this._announcer = new Announcer(this.game, Supercold.texts.SUPERCOLD, {
         initDelay: 600,
         nextDelay: 700,
         overlay: true,
@@ -1398,13 +1641,10 @@ Supercold.Intro.prototype.create = function() {
     }).announce();
 };
 
-/**
- * Used here for debugging purposes.
- */
-Supercold.Intro.prototype.render = function() {
-    if (DEBUG) {
-        this.showDebugInfo();
-    }
+Supercold.Intro.prototype.resize = function(width, height) {
+    Supercold._BaseState.prototype.resize.call(this, width, height);
+    this.rescale(this._background);
+    this._announcer.resize();
 };
 
 /******************************* Game State *******************************/
@@ -1417,40 +1657,76 @@ Supercold.Intro.prototype.render = function() {
  */
 
 /**
+ * A generic sprite for our game.
+ * It provides useful methods for handling the Phaser World scaling.
+ */
+function Sprite(game, x, y, key, _frame) {
+    Phaser.Sprite.call(this, game, x, y, key, _frame);
+    this.name = 'Supercold Sprite';
+}
+
+Sprite.prototype = Object.create(Phaser.Sprite.prototype);
+Sprite.prototype.constructor = Sprite;
+
+/**
  * One of the game's live entities, i.e. the player or a bot.
+ * @abstract
  */
 function LiveSprite(game, x, y, key, _frame) {
-    Phaser.Sprite.call(this, game, x, y, key, _frame);
+    Sprite.call(this, game, x, y, key, _frame);
 
+    this.name = 'LiveSprite';
     // Time until the next bullet can be fired.
     this.remainingTime = 0;
 }
 
-LiveSprite.prototype = Object.create(Phaser.Sprite.prototype);
+LiveSprite.prototype = Object.create(Sprite.prototype);
 LiveSprite.prototype.constructor = LiveSprite;
+
+/**
+ * Resets the LiveSprite.
+ * LiveSprite's may be recycled in a group, so override this method in
+ * derived objects if necessary to reset any extra state they introduce.
+ */
+LiveSprite.prototype.reset = function(x, y, _health) {
+    Sprite.prototype.reset.call(this, x, y, _health);
+    this.remainingTime = 0;
+};
 
 /**
  * The player.
  */
 function Player(game, x, y, scale) {
-    scale = scale || 1;
     LiveSprite.call(this, game, x, y, game.cache.getBitmapData(CACHE.KEY.PLAYER));
 
     this.name = 'Player';
-    this.scale.set(scale);
+    this.baseScale = scale || 1;
+
     this.game.add.existing(this);
 
     // No group for Player, so enable physics here.
     this.game.physics.enable(this, PHYSICS_SYSTEM, DEBUG);
-    this.body.setCircle(Supercold.player.radius * scale);
+    this.body.setCircle(Supercold.player.radius * this.baseScale);
+
+    // Account for world scaling.
+    this.resize(this.game.world.scale);
 }
 
 Player.prototype = Object.create(LiveSprite.prototype);
 Player.prototype.constructor = Player;
 
 Player.prototype.kill = function() {
-    // TODO: Add fancy kill effect.
     LiveSprite.prototype.kill.call(this);
+    // TODO: Add fancy kill effect.
+};
+
+/**
+ * Handles resizing of the player.
+ * Useful when the game world is rescaled.
+ * @param {Phaser.Point} worldScale - The scale of the world.
+ */
+Player.prototype.resize = function(worldScale) {
+    this.scale.set(this.baseScale / worldScale.x, this.baseScale / worldScale.y);
 };
 
 Player.prototype.move = function() {
@@ -1484,6 +1760,9 @@ function Bot(game, x, y, _key, _frame) {
      * How long it will dodge.
      */
     this.duration = 0;
+
+    // Don't fire immediately!
+    this.remainingTime = Supercold.initFireDelay;
 }
 
 Bot.count = 0;
@@ -1492,8 +1771,21 @@ Bot.prototype = Object.create(LiveSprite.prototype);
 Bot.prototype.constructor = Bot;
 
 Bot.prototype.kill = function() {
-    // TODO: Add fancy kill effect.
     LiveSprite.prototype.kill.call(this);
+    // TODO: Add fancy kill effect.
+};
+
+/**
+ * Resets the Bot.
+ * Bot's are recycled in their group, so we override
+ * this method to reset the extra state they introduce.
+ */
+Bot.prototype.reset = function(x, y, _health) {
+    LiveSprite.prototype.reset.call(this, x, y, _health);
+    this.remainingTime = Supercold.initFireDelay;
+    this.dodging = false;
+    this.direction = null;
+    this.duration = 0;
 };
 
 Bot.prototype.fire = function() {
@@ -1508,14 +1800,14 @@ Bot.prototype.advance = function() {
  * A bullet fired from a LiveSprite.
  */
 function Bullet(game, x, y, _key, _frame) {
-    Phaser.Sprite.call(this, game, x, y, game.cache.getBitmapData(CACHE.KEY.BULLET));
+    Sprite.call(this, game, x, y, game.cache.getBitmapData(CACHE.KEY.BULLET));
 
+    this.name = 'Bullet ' + Bullet.count++;
     /**
      * Who shot the bullet.
      */
     this.owner = null;
 
-    this.name = 'Bullet ' + Bullet.count++;
     // Using these properties does NOT work, because when checking the world
     // bounds in the preUpdate method, the world scale is not taken into account!
     // THIS TOOK ME A LONG TIME TO FIND OUT. -.-'
@@ -1525,8 +1817,23 @@ function Bullet(game, x, y, _key, _frame) {
 
 Bullet.count = 0;
 
-Bullet.prototype = Object.create(Phaser.Sprite.prototype);
+Bullet.prototype = Object.create(Sprite.prototype);
 Bullet.prototype.constructor = Bullet;
+
+Bullet.prototype.kill = function() {
+    Sprite.prototype.kill.call(this);
+    // TODO: Add fancy kill effect.
+};
+
+/**
+ * Resets the Bullet.
+ * Bullet's are recycled in their group, so we override
+ * this method to reset the extra state they introduce.
+ */
+Bullet.prototype.reset = function(x, y, _health) {
+    Sprite.prototype.reset.call(this, x, y, _health);
+    this.owner = null;
+};
 
 /**
  * Cached variable for the scaled world bounds.
@@ -1540,8 +1847,10 @@ Bullet._worldBounds = new Phaser.Rectangle();
 Bullet.prototype.preUpdate = function() {
     var camera = this.game.camera, scale = camera.scale;
 
-    if (!Phaser.Sprite.prototype.preUpdate.call(this)) return false;
-    if (!this.alive) return false;
+    //
+    if (!Sprite.prototype.preUpdate.call(this) || !this.alive) {
+        return false;
+    }
 
     // Scale the world bounds.
     Bullet._worldBounds.copyFrom(this.game.world.bounds);
@@ -1558,20 +1867,19 @@ Bullet.prototype.preUpdate = function() {
     return true;
 };
 
-Bullet.prototype.kill = function() {
-    // TODO: Add fancy kill effect.
-    Phaser.Sprite.prototype.kill.call(this);
-};
-
 /**
  * The trail that a bullet leaves behind.
  */
 function BulletTrail(game, x, y, _key, _frame) {
     Phaser.Image.call(this, game, x, y, game.cache.getBitmapData(CACHE.KEY.TRAIL));
 
+    this.name = 'Trail ' + BulletTrail.count++;
+    this.anchor.x = 1;
+    this.anchor.y = 0.5;
+
     /**
      * The bullet that this trail belongs to.
-     * May be null if the bullet was destroyed recently.
+     * Will be null if the bullet was destroyed.
      */
     this.bullet = null;
     /**
@@ -1579,10 +1887,6 @@ function BulletTrail(game, x, y, _key, _frame) {
      */
     this.refX = 0;
     this.refY = 0;
-
-    this.name = 'Trail ' + BulletTrail.count++;
-    this.anchor.x = 1;
-    this.anchor.y = 0.5;
 }
 
 BulletTrail.count = 0;
@@ -1590,35 +1894,114 @@ BulletTrail.count = 0;
 BulletTrail.prototype = Object.create(Phaser.Image.prototype);
 BulletTrail.prototype.constructor = BulletTrail;
 
+/**
+ * Resets the BulletTrail.
+ * BulletTrail's are recycled in their group, so we override
+ * this method to reset the extra state they introduce.
+ */
+BulletTrail.prototype.reset = function(x, y, _health) {
+    Phaser.Image.prototype.reset.call(this, x, y, _health);
+    this.refX = 0;
+    this.refY = 0;
+};
 
-function extendName(sprite, group) {
-    sprite.name += ', ' + (group.length-1) + ' in ' + group.name;
-}
+/**
+ * Starts the trail.
+ * The trail starts moving and expanding behind the given bullet.
+ * @param {Bullet} bullet - The bullet for this trail.
+ */
+BulletTrail.prototype.start = function(bullet) {
+    this.rotation = bullet.body.rotation;
+    this.bullet = bullet;
+    this.refX = bullet.x;
+    this.refY = bullet.y;
+    this.width = 0;
+};
+
+/**
+ * Stops the trail.
+ * The trail stops moving and expanding, and becomes stray.
+ */
+BulletTrail.prototype.stop = function() {
+    this.refX = this.bullet.x;
+    this.refY = this.bullet.y;
+    this.bullet = null;
+};
 
 
 /**
- * A group of 'Bot's with enabled physics.
+ * A generic group for our game.
+ * It provides useful methods for handling the Phaser world scale.
+ * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {number} [scale=1] - The base scale for this group.
+ * @param {string} [name='group'] - A name for this group.
  */
-function BotGroup(game, scale, name, _parent) {
-    name = name || 'Bots';
+function Group(game, scale, name, _parent) {
     Phaser.Group.call(this, game, _parent, name, false, true, PHYSICS_SYSTEM);
 
-    this._scale = scale;
+    /**
+     * The base scaling values that are used to calculate the final ones.
+     * Useful for storing scaling values to implement mutators.
+     */
+    this.baseScale = scale || 1;
+    /**
+     * The actual scaling values that are applied to the sprites of the group.
+     * This takes the world scale into account.
+     */
+    this.finalScale = new Phaser.Point(
+        this.baseScale / game.world.scale.x, this.baseScale / game.world.scale.y);
+}
+
+Group.prototype = Object.create(Phaser.Group.prototype);
+Group.prototype.constructor = Group;
+
+/**
+ * Appends info about this group to the name of the child specified.
+ */
+Group.prototype.extendChildName = function(child) {
+    child.name += ', ' + this.getChildIndex(child) + ' in ' + this.name;
+};
+
+/**
+ * Sets the scaling values for all the children of the group.
+ * @param {Phaser.Point} worldScale - The scale of the world.
+ */
+Group.prototype.resize = function(worldScale) {
+    var length = this.children.length, i;
+
+    this.finalScale.set(
+        this.baseScale / worldScale.x, this.baseScale / worldScale.y);
+    for (i = 0; i < length; ++i) {
+        this.children[i].scale.copyFrom(this.finalScale);
+    }
+};
+
+/**
+ * A group of 'Bot's with enabled physics.
+ * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {number} [scale=1] - The base scale for this group.
+ */
+function BotGroup(game, scale) {
+    Group.call(this, game, scale, 'Bots');
+
     this.classType = Bot;
 
     // Bots receive input (for hotswitching).
     this.inputEnableChildren = true;
 }
 
-BotGroup.prototype = Object.create(Phaser.Group.prototype);
+BotGroup.prototype = Object.create(Group.prototype);
 BotGroup.prototype.constructor = BotGroup;
 
-BotGroup.prototype.create = function(x, y) {
-    var bot = Phaser.Group.prototype.create.call(this, x, y, null, null);
+/**
+ * Creates a new Bot object and adds it to the top of this group.
+ */
+BotGroup.prototype.create = function(x, y, _key, _frame) {
+    var bot = Group.prototype.create.call(this, x, y, null, null);
 
-    if (DEBUG) extendName(bot, this);
-    bot.scale.set(this._scale);
-    bot.body.setCircle(Supercold.player.radius * this._scale);
+    if (DEBUG) this.extendChildName(bot);
+    bot.scale.copyFrom(this.finalScale);
+    bot.body.setCircle(Supercold.player.radius * this.baseScale);
     bot.body.debug = DEBUG;
 
     // Players may click near the bot to shoot.
@@ -1632,26 +2015,31 @@ BotGroup.prototype.create = function(x, y) {
 
 /**
  * A group of 'Bullet's with enabled physics.
+ * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {number} [scale=1] - The base scale for this group.
  */
-function BulletGroup(game, name, _parent) {
-    name = name || 'Bullets';
-    Phaser.Group.call(this, game, _parent, name, false, true, PHYSICS_SYSTEM);
-
+function BulletGroup(game, scale, name) {
+    Group.call(this, game, scale, name || 'Bullets');
     this.classType = Bullet;
 }
 
-BulletGroup.prototype = Object.create(Phaser.Group.prototype);
+BulletGroup.prototype = Object.create(Group.prototype);
 BulletGroup.prototype.constructor = BulletGroup;
 
-BulletGroup.prototype.create = function() {
-    var bullet = Phaser.Group.prototype.create.call(this, 0, 0, null, null, false),
+/**
+ * Creates a new Bullet object and adds it to the top of this group.
+ * All arguments given to this method are ignored.
+ */
+BulletGroup.prototype.create = function(_x, _y, _key, _frame) {
+    var bullet = Group.prototype.create.call(this, 0, 0, null, null, false),
         specs = Supercold.bullet,
         offsetX = (specs.width - specs.bodyLen) / 2;
 
-    if (DEBUG) extendName(bullet, this);
+    if (DEBUG) this.extendChildName(bullet);
+    bullet.scale.copyFrom(this.finalScale);
     // Set two shapes to closely resemble the shape of the bullet.
     bullet.body.setRectangle(specs.bodyLen, specs.height, -offsetX);
-    bullet.body.addCircle(specs.tipRadius, offsetX);
+    bullet.body.addCircle(specs.bodyLen / 2, offsetX);
     // Do NOT produce contact forces, so that bullets do not
     // change direction when colliding with other sprites.
     // We need to access the P2JS internals for this.
@@ -1668,46 +2056,75 @@ BulletGroup.prototype.create = function() {
 
 /**
  * A group of 'BulletTrail's.
+ * @param {Phaser.Game} game - A reference to the currently running Game.
  */
-function BulletTrailGroup(game, _name, _parent) {
-    Phaser.Group.call(this, game, _parent, 'BulletTrails');
+function BulletTrailGroup(game, _name) {
+    Group.call(this, game, 1, 'BulletTrails');
     this.classType = BulletTrail;
 }
 
-BulletTrailGroup.prototype = Object.create(Phaser.Group.prototype);
+BulletTrailGroup.prototype = Object.create(Group.prototype);
 BulletTrailGroup.prototype.constructor = BulletTrailGroup;
 
-BulletTrailGroup.prototype.create = function() {
-    var trail = Phaser.Group.prototype.create.call(this, 0, 0, null, null, false);
+/**
+ * Creates a new BulletTrail object and adds it to the top of this group.
+ * Only the 'x', 'y' arguments given to this method are taken into account.
+ */
+BulletTrailGroup.prototype.create = function(x, y, _key, _frame, _exists) {
+    var trail = Group.prototype.create.call(this, x, y, null, null, true);
 
-    if (DEBUG) extendName(trail, this);
+    if (DEBUG) this.extendChildName(trail);
+    trail.scale.copyFrom(this.finalScale);
     return trail;
 };
 
+/**
+ * Sets the scaling values for all the children of the group.
+ * @param {Phaser.Point} worldScale - The scale of the world.
+ */
+BulletTrailGroup.prototype.resize = function(worldScale) {
+    var oldWorldScaleX = 1 / this.finalScale.x,
+        oldWorldScaleY = 1 / this.finalScale.y,
+        newScale = new Phaser.Point(1, 1),
+        length = this.children.length, trail, i;
 
-function BulletTrailPainter(game) {
-    this.math = game.math;
-
-    this._liveTrails = {};
-    this._deadTrails = {};
-    this._trailGroup = new BulletTrailGroup(game);
-}
-
-BulletTrailPainter.prototype._getLength = function(bullet, trail) {
-    return Math.min(
-        this.math.distance(bullet.x, bullet.y, trail.refX, trail.refY),
-        trail.texture.width);
+    this.finalScale.set(1 / worldScale.x, 1 / worldScale.y);
+    for (i = 0; i < length; ++i) {
+        trail = this.children[i];
+        // scale * oldWorldScale = (1/oldWorldScale * factor) * oldWorldScale = factor
+        newScale.set(trail.scale.x*oldWorldScaleX / worldScale.x,
+                     trail.scale.y*oldWorldScaleY / worldScale.y);
+        trail.scale.copyFrom(newScale);
+    }
 };
 
-BulletTrailPainter.prototype.addTrail = function(bullet) {
-    var trail = this._trailGroup.getFirstDead(true);
 
-    trail.rotation = bullet.body.rotation;
-    trail.bullet = bullet;
-    trail.refX = bullet.x;
-    trail.refY = bullet.y;
-    trail.width = 0;
-    trail.revive();
+/***** Objects for graphics or UI *****/
+
+/**
+ * An object that draws trails behind bullets.
+ * @param {Phaser.Game} game - A reference to the currently running Game.
+ */
+function BulletTrailPainter(game) {
+    this.game = game;
+    this.trails = new BulletTrailGroup(game);
+
+    // Dictionary for fast lookups.
+    this._liveTrails = {};
+}
+
+/**
+ * Handles resizing of all bullet trails.
+ * Useful when the game world is rescaled.
+ */
+BulletTrailPainter.prototype.resize = function() {
+    this.trails.resize(this.game.world.scale);
+};
+
+BulletTrailPainter.prototype.startTrail = function(bullet) {
+    var trail = this.trails.getFirstDead(true, bullet.x, bullet.y);
+
+    trail.start(bullet);
     this._liveTrails[bullet.name] = trail;
 };
 
@@ -1716,36 +2133,37 @@ BulletTrailPainter.prototype.stopTrail = function(bullet) {
 
     // Check if the trail exists, since the handler may be called more than once!
     if (trail) {
-        trail.refX = bullet.x;
-        trail.refY = bullet.y;
-        this._deadTrails[trail.name] = trail;
+        trail.stop();
         delete this._liveTrails[bullet.name];
     }
 };
 
+BulletTrailPainter.prototype._getTrailLength = function(trail) {
+    var bullet = trail.bullet;
+    // Note that we account for world scaling.
+    return Math.min(
+        this.game.math.distance(bullet.x, bullet.y, trail.refX, trail.refY),
+        trail.texture.width / this.game.world.scale.x);
+};
+
 BulletTrailPainter.prototype.updateTrails = function(elapsedTime) {
-    var name, trail;
+    var trails = this.trails.children, trail, i;
 
-    for (name in this._liveTrails) {
-        if (!this._liveTrails.hasOwnProperty(name))
-            continue;
-        trail = this._liveTrails[name];
+    for (i = 0; i < trails.length; ++i) {
+        trail = trails[i];
+        if (!trail.alive) continue;
 
-        // Don't round this value, since it causes jitter.
-        trail.width = this._getLength(trail.bullet, trail);
-        trail.x = trail.bullet.x;
-        trail.y = trail.bullet.y;
-    }
-    for (name in this._deadTrails) {
-        if (!this._deadTrails.hasOwnProperty(name))
-            continue;
-        trail = this._deadTrails[name];
-
-        // Don't round this value, since it causes jitter.
-        trail.width -= Supercold.speeds.bullet.normal * elapsedTime;
-        if (trail.width < 0) {
-            trail.kill();
-            delete this._deadTrails[name];
+        if (trail.bullet !== null) {    // Live
+            // Don't round this value, since it causes jitter.
+            trail.width = this._getTrailLength(trail);
+            trail.x = trail.bullet.x;
+            trail.y = trail.bullet.y;
+        } else {                        // Stray
+            // Don't round this value, since it causes jitter.
+            trail.width -= (Supercold.speeds.bullet.normal * elapsedTime);
+            if (trail.width <= 0) {
+                trail.kill();
+            }
         }
     }
 };
@@ -1753,124 +2171,191 @@ BulletTrailPainter.prototype.updateTrails = function(elapsedTime) {
 
 /**
  * Abstract base class for heads-up displays.
+ * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {number} x - The x-coordinate of the top-left corner of the HUD.
+ * @param {number} y - The y-coordinate of the top-left corner of the HUD.
+ * @param {number} width - The width of the HUD.
+ * @param {number} height - The height of the HUD.
+ * @param {string} key - A key for the Phaser chache.
+ * @abstract
  */
-function HUD(game, options) {
-    this.hud = makeBitmapData(
-        game, options.width, options.height, options.key, true);
-    this.hudImage = this.hud.addToWorld(
-        game.camera.width - (options.x + options.width)*game.camera.scale.x,
-        game.camera.height - options.y*game.camera.scale.y,
-        0, 1);
+function HUD(game, x, y, width, height, key) {
+    var scale = game.camera.scale,
+        // Round, don't ceil!
+        scaledWidth = Math.round(width * scale.x),
+        scaledHeight = Math.round(height * scale.y);
 
+    this.game = game;
+
+    this.width = width;
+    this.height = height;
+
+    this.hud = game.make.bitmapData(scaledWidth, scaledHeight, key, true);
+    this.hudImage = this.hud.addToWorld(x, y);
+
+    this.hudImage.name = key;
     this.hudImage.fixedToCamera = true;
-    game.scale.onSizeChange.add(function resize() {
-        this.hudImage.x = game.camera.width -
-            (options.x + this.hud.width)*game.camera.scale.x;
-        this.hudImage.y = game.camera.height - options.y*game.camera.scale.y;
-        this.hudImage.cameraOffset.set(this.hudImage.x, this.hudImage.y);
-    }, this);
+    // Account for camera scaling.
+    this.hudImage.scale.set(1 / scale.x, 1 / scale.y);
 }
+
+/**
+ * Handles resizing of the HUD.
+ * Useful when the camera scale changes.
+ * @param {number} x - The x-coordinate of the top-left corner of the HUD.
+ * @param {number} y - The y-coordinate of the top-left corner of the HUD.
+ */
+HUD.prototype.resize = function(x, y) {
+    var scale = this.game.camera.scale,
+        // Round, don't ceil!
+        scaledWidth = Math.round(this.width * scale.x),
+        scaledHeight = Math.round(this.height * scale.y);
+
+    this.hud.resize(scaledWidth, scaledHeight);
+    this.hudImage.x = x;
+    this.hudImage.y = y;
+    this.hudImage.cameraOffset.set(x, y);
+    // Account for camera scaling.
+    this.hudImage.scale.set(1 / scale.x, 1 / scale.y);
+};
 
 HUD.prototype.update = function() {
     throw new Error('Abstract base class');
 };
 
 
-function Minimap(game) {
-    HUD.call(this, game, {
-        x: Minimap.x,
-        y: Minimap.y,
-        width: Supercold.minimap.width,
-        height: Supercold.minimap.height,
-        key: 'Minimap'
-    });
+/**
+ * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {number} x - The x-coordinate of the top-left corner of the minimap.
+ * @param {number} y - The y-coordinate of the top-left corner of the minimap.
+ * @param {number} width - The width of the minimap.
+ * @param {number} height - The height of the minimap.
+ */
+function Minimap(game, x, y, width, height) {
+    HUD.call(this, game, x, y, width, height, 'Minimap');
 
     this._ratio = {
         x: Supercold.minimap.width / game.world.bounds.width,
         y: Supercold.minimap.height / game.world.bounds.height
     };
-}
 
-/**
- * Coordinates for the bottom-right corner.
- */
-Minimap.x = 10;
-Minimap.y = 10;
+    this.hud.ctx.fillStyle = Supercold.style.minimap.background.color;
+    this.hud.ctx.strokeStyle = Supercold.style.minimap.border.color;
+    this.hud.ctx.lineWidth = Supercold.style.minimap.border.lineWidth;
+    this.hud.ctx.lineJoin = 'round';
+}
 
 Minimap.prototype = Object.create(HUD.prototype);
 Minimap.prototype.constructor = Minimap;
 
-Minimap.prototype._markEntity = function(entity, style) {
+/**
+ * Handles resizing of the minimap.
+ * Useful when the camera scale changes.
+ * @param {number} x - The x-coordinate of the top-left corner of the minimap.
+ * @param {number} y - The y-coordinate of the top-left corner of the minimap.
+ */
+Minimap.prototype.resize = function(x, y) {
+    HUD.prototype.resize.call(this, x, y);
+    // Resizing may cause the canvas state to reset!
+    this.hud.ctx.fillStyle = Supercold.style.minimap.background.color;
+    this.hud.ctx.strokeStyle = Supercold.style.minimap.border.color;
+    this.hud.ctx.lineWidth = Supercold.style.minimap.border.lineWidth;
+};
+
+Minimap.prototype._markEntity = function(entity, radius) {
     var ctx = this.hud.ctx;
 
-    ctx.fillStyle = style.color;
-    ctx.strokeStyle = style.strokeStyle;
-    ctx.lineWidth = style.lineWidth;
     // Just draw a circle.
-    circle(ctx, entity.x * this._ratio.x, entity.y * this._ratio.y, style.radius);
+    circle(ctx, entity.x * this._ratio.x, entity.y * this._ratio.y, radius);
     ctx.fill();
     ctx.stroke();
 };
 
 Minimap.prototype._markPlayer = function(player) {
-    this._markEntity(player, Supercold.style.minimap.player);
+    this._markEntity(player, Supercold.style.minimap.player.radius);
 };
-
 Minimap.prototype._markBot = function(bot) {
-    this._markEntity(bot, Supercold.style.minimap.bot);
+    this._markEntity(bot, Supercold.style.minimap.bot.radius);
 };
 
 Minimap.prototype.update = function(player, bots) {
-    var map = this.hud, ctx = map.ctx,
-        padX = PADDING.width * this._ratio.x,
-        padY = PADDING.height * this._ratio.y;
-
-    ctx.clearRect(0, 0, map.width, map.height);
-    ctx.fillStyle = Supercold.style.minimap.background.color;
-    ctx.fillRect(0, 0, map.width, map.height);
-    ctx.strokeStyle = Supercold.style.minimap.border.color;
-    ctx.lineWidth = Supercold.style.minimap.border.lineWidth;
-    ctx.strokeRect(0, 0, map.width, map.height);
-
-    ctx.strokeStyle = Supercold.style.minimap.innerBorder.color;
-    ctx.lineWidth = Supercold.style.minimap.innerBorder.lineWidth;
-    ctx.strokeRect(padX, padY, map.width - 2*padX, map.height - 2*padY);
-    ctx.restore();
+    var padX = Math.round(PADDING.width * this._ratio.x),
+        padY = Math.round(PADDING.height * this._ratio.y),
+        ctx = this.hud.ctx, style;
 
     ctx.save();
-    // The (0, 0) coordinates of our world are in the center!
-    ctx.translate(map.width / 2, map.height / 2);
-    bots.forEachAlive(this._markBot, this);
-    this._markPlayer(player);
+        ctx.scale(this.game.camera.scale.x, this.game.camera.scale.y);
+
+        // Clear the map. Necessary since background is semi-transparent.
+        ctx.clearRect(0, 0, this.width, this.height);
+        ctx.fillRect(0, 0, this.width, this.height);
+        ctx.strokeRect(0, 0, this.width, this.height);
+
+        ctx.strokeStyle = Supercold.style.minimap.innerBorder.color;
+        ctx.lineWidth = Supercold.style.minimap.innerBorder.lineWidth;
+        ctx.strokeRect(padX, padY, this.width - 2*padX, this.height - 2*padY);
+
+        // The (0, 0) point of our world is in the center!
+        ctx.translate(this.width / 2, this.height / 2);
+
+        style = Supercold.style.minimap.bot;
+        ctx.fillStyle = style.color;
+        ctx.strokeStyle = style.strokeStyle;
+        ctx.lineWidth = style.lineWidth;
+        bots.forEachAlive(this._markBot, this);
+
+        style = Supercold.style.minimap.player;
+        ctx.fillStyle = style.color;
+        ctx.strokeStyle = style.strokeStyle;
+        ctx.lineWidth = style.lineWidth;
+        this._markPlayer(player);
     ctx.restore();
-    map.dirty = true;
+    // Re-render!
+    this.hud.dirty = true;
 };
 
 
-function ReloadBar(game, x, y, key, fillStyle) {
-    HUD.call(this, game, {
-        x: x,
-        y: y,
-        width: Supercold.bar.width,
-        height: Supercold.bar.height,
-        key: key
-    });
-    this.hud.rect(0, 0, this.hud.width, this.hud.height, fillStyle);
+/**
+ * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {number} x - The x-coordinate of the top-left corner of the reload bar.
+ * @param {number} y - The y-coordinate of the top-left corner of the reload bar.
+ * @param {number} width - The width of the reload bar.
+ * @param {number} height - The height of the reload bar.
+ * @param {string} key - A key for the Phaser chache.
+ */
+function ReloadBar(game, x, y, width, height, key, fillStyle) {
+    HUD.call(this, game, x, y, Supercold.bar.width, Supercold.bar.height, key);
 
+    this._fillStyle = fillStyle;
     this._tween = null;
 
-    this.add = game.add;
-    this.time = game.time;
+    this._fill();
 }
 
 ReloadBar.prototype = Object.create(HUD.prototype);
 ReloadBar.prototype.constructor = ReloadBar;
 
+ReloadBar.prototype._fill = function() {
+    this.hud.rect(0, 0, this.hud.width, this.hud.height, this._fillStyle);
+};
+
+/**
+ * Handles resizing of the reload bar.
+ * Useful when the camera scale changes.
+ * @param {number} x - The x-coordinate of the top-left corner of the reload bar.
+ * @param {number} y - The y-coordinate of the top-left corner of the reload bar.
+ */
+ReloadBar.prototype.resize = function(x, y) {
+    HUD.prototype.resize.call(this, x, y);
+    // Resizing clears the canvas!
+    this._fill();
+};
+
 /**
  * @param {number} progress - A value in the range [0, 1].
  */
 ReloadBar.prototype.update = function(progress) {
-    this.hudImage.width = this.hudImage.texture.width * progress;
+    this.hudImage.scale.x = progress / this.game.camera.scale.x;
     this.hudImage.alpha = (progress === 1) ? 1 : 0.75;
 };
 
@@ -1879,13 +2364,13 @@ ReloadBar.prototype._removeTween = function() {
 };
 
 ReloadBar.prototype.shake = function() {
-    var duration = this.time.physicsElapsedMS;
+    var duration = this.game.time.physicsElapsedMS;
 
     // Already shaking!
     if (this._tween) return;
 
     // The element is fixed to camera, so use the cameraOffset property.
-    this._tween = this.add.tween(this.hudImage.cameraOffset).to({
+    this._tween = this.game.add.tween(this.hudImage.cameraOffset).to({
         x: '-1'
     }, duration, Phaser.Easing.Linear.None);
     this._tween.to({
@@ -1898,41 +2383,45 @@ ReloadBar.prototype.shake = function() {
     this._tween.start();
 };
 
-function HotswitchBar(game) {
-    ReloadBar.call(this, game, HotswitchBar.x, HotswitchBar.y, 'HotswitchBar',
+/**
+ * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {number} x - The x-coordinate of the top-left corner of the hotswitch bar.
+ * @param {number} y - The y-coordinate of the top-left corner of the hotswitch bar.
+ * @param {number} width - The width of the hotswitch bar.
+ * @param {number} height - The height of the hotswitch bar.
+ */
+function HotswitchBar(game, x, y, width, height) {
+    ReloadBar.call(this, game, x, y, width, height, 'HotswitchBar',
                    Supercold.style.hotswitchBar.color);
 }
-
-/**
- * Coordinates for the bottom-right corner.
- */
-HotswitchBar.x = 10;
-HotswitchBar.y = Minimap.y + Supercold.minimap.height + 2;
 
 HotswitchBar.prototype = Object.create(ReloadBar.prototype);
 HotswitchBar.prototype.constructor = HotswitchBar;
 
-function BulletBar(game) {
-    ReloadBar.call(this, game, BulletBar.x, BulletBar.y, 'BulletBar',
+/**
+ * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {number} x - The x-coordinate of the top-left corner of the bullet bar.
+ * @param {number} y - The y-coordinate of the top-left corner of the bullet bar.
+ * @param {number} width - The width of the bullet bar.
+ * @param {number} height - The height of the bullet bar.
+ */
+function BulletBar(game, x, y, width, height) {
+    ReloadBar.call(this, game, x, y, width, height, 'BulletBar',
                    Supercold.style.bulletBar.color);
 }
-
-/**
- * Coordinates for the bottom-right corner.
- */
-BulletBar.x = 10;
-BulletBar.y = HotswitchBar.y + Supercold.bar.height + 2;
 
 BulletBar.prototype = Object.create(ReloadBar.prototype);
 BulletBar.prototype.constructor = BulletBar;
 
 
+/***** The core of the game *****/
+
 Supercold.Game = function(game) {
-    Supercold._ScalableState.call(this, game);
+    Supercold._BaseState.call(this, game);
 
     this._sprites = {
-        bounds: null,
-        player: null
+        player: null,
+        background: null
     };
     this._colGroups = {         // Collision groups
         player: null,
@@ -1941,6 +2430,7 @@ Supercold.Game = function(game) {
         botBullets: null
     };
     this._groups = {
+        bounds: null,
         bots: null,
         playerBullets: null,
         botBullets: null
@@ -1958,6 +2448,10 @@ Supercold.Game = function(game) {
         hotswitchBar: null
     };
 
+    this._announcer = null;
+    this._overlay = null;
+    this._superhotFx = null;
+
     // These will be set in init.
     this.level = -1;
     this._totalBotCount = -1;
@@ -1970,8 +2464,6 @@ Supercold.Game = function(game) {
     this._nextHotSwitch = 0;
     this._hotswitching = false;
 
-    this._superhotFx = null;
-
     // Internal cached objects.
     this._cached = {
         verVec: {x: 0, y: 0},
@@ -1979,7 +2471,7 @@ Supercold.Game = function(game) {
     };
 };
 
-Supercold.Game.prototype = Object.create(Supercold._ScalableState.prototype);
+Supercold.Game.prototype = Object.create(Supercold._BaseState.prototype);
 Supercold.Game.prototype.constructor = Supercold.Game;
 
 
@@ -2017,11 +2509,10 @@ Supercold.Game.prototype.init = function(options) {
 function bulletHandler(myBullet, otherBullet) {
    myBullet.sprite.kill();
    // The other bullet will be killed by the other handler call.
-   // TODO: Add fancy effects.
 }
 
-Supercold.Game.prototype._addTrail = function(bullet) {
-    this._bulletTrailPainter.addTrail(bullet);
+Supercold.Game.prototype._startTrail = function(bullet) {
+    this._bulletTrailPainter.startTrail(bullet);
 };
 Supercold.Game.prototype._stopTrail = function(bullet) {
     this._bulletTrailPainter.stopTrail(bullet);
@@ -2030,7 +2521,7 @@ Supercold.Game.prototype._stopTrail = function(bullet) {
 Supercold.Game.prototype._createBullet = function(group, myColGroup) {
     var bullet = group.create();
 
-    bullet.events.onRevived.add(this._addTrail, this);
+    bullet.events.onRevived.add(this._startTrail, this);
     bullet.events.onKilled.add(this._stopTrail, this);
     bullet.body.setCollisionGroup(myColGroup);
     // All bullets collide with all other bullets and all live entities.
@@ -2048,7 +2539,7 @@ Supercold.Game.prototype._createBotBullet = function() {
 };
 
 Supercold.Game.prototype._createPlayerBound = function(rect, i, collisionGroup) {
-    var bound = this._sprites.bounds.create(rect.x, rect.y, null);
+    var bound = this._groups.bounds.create(rect.x, rect.y, null);
 
     bound.name = 'Bound ' + i;
     bound.body.static = true;
@@ -2066,10 +2557,10 @@ Supercold.Game.prototype._createPlayerBound = function(rect, i, collisionGroup) 
  * Creates boundaries around the world that restrict the player's movement.
  */
 Supercold.Game.prototype._addPlayerBounds = function(collisionGroup) {
-    var bounds = this.bounds;
+    var bounds = this.world.bounds;
 
-    this._sprites.bounds = this.add.physicsGroup(PHYSICS_SYSTEM);
-    this._sprites.bounds.name = 'Player Bounds';
+    this._groups.bounds = this.add.physicsGroup(PHYSICS_SYSTEM);
+    this._groups.bounds.name = 'Player Bounds';
     // Note that all invisible walls have double the width or height in order to
     // prevent the player from getting out of the world bounds when hotswitching.
     [new Phaser.Rectangle(
@@ -2101,171 +2592,13 @@ Supercold.Game.prototype._addPlayerBounds = function(collisionGroup) {
     }, this);
 };
 
-Supercold.Game.prototype._superhot = function() {
-    var DELAY = 100, newLevel = this.level + 1;
-
-    this._sprites.player.body.setZeroVelocity();
-
-    // TODO: Add fancy effect.
-    Supercold.storage.saveLevel(newLevel);
-    this.time.events.add(DELAY, function superhot() {
-        var superhot = Supercold.texts.SUPERHOT.split(' '),
-            announcer = new Announcer(this.game, superhot, {
-                nextDelay: 650,
-                finalDelay: 400,
-                repeat: true,
-                overlay: true,
-                overlayColor: 'light'
-            }),
-            superDuration = announcer.options.nextDelay + announcer.options.duration,
-            hotDuration = announcer.options.finalDelay + announcer.options.duration,
-            duration = superDuration + hotDuration,
-            times = 3, delay = times * duration, i;
-
-        for (i = 0; i < times; ++i) {
-            this.time.events.add(i*duration, function saySuper() {
-                this._superhotFx.play('super');
-            }, this);
-            this.time.events.add(i*duration + superDuration, function sayHot() {
-                this._superhotFx.play('hot');
-            }, this);
-        }
-        announcer.announce();
-
-        this.time.events.add(delay, function nextLevel() {
-            this.state.start('Game', CLEAR_WORLD, !CLEAR_CACHE, {
-                level: newLevel
-            });
-        }, this);
-    }, this);
-};
-
-Supercold.Game.prototype._botKillHandler = function(bot, bullet, _botS, _bulletS) {
-    bot.sprite.kill();
-    bullet.sprite.kill();
-    if (this.superhot) {
-        this._superhot();       // SUPERHOT!
-    }
-};
-
-/**
- * Spawns the next bot.
- * @param {boolean} [closer=false] - If true, makes the bot appear closer to the player.
- */
-Supercold.Game.prototype._spawnBot = function(closer) {
-    var view = this.camera.view, colGroups = this._colGroups,
-        scale = (closer) ? 0.75 : 1.2,
-        offset = (Supercold.player.radius * this._spriteScale) * 2 * scale,
-        baseX = ((this.rnd.between(0, 1)) ? view.left : view.right) * scale,
-        baseY = ((this.rnd.between(0, 1)) ? view.top : view.bottom) * scale,
-        bot = this._groups.bots.getFirstDead(true,
-            this.rnd.between(baseX, baseX + offset),
-            this.rnd.between(baseY, baseY + offset));
-
-    --this._totalBotCount;
-    bot.alpha = 0.1;
-    this.add.tween(bot).to({
-        alpha: 1
-    }, 800, Phaser.Easing.Linear.None, AUTOSTART);
-    bot.body.setCollisionGroup(colGroups.bots);
-    // Bots collide against themselves, the player and all bullets.
-    bot.body.collides([colGroups.bots, colGroups.player]);
-    bot.body.collides(
-        [colGroups.botBullets, colGroups.playerBullets], this._botKillHandler, this);
-};
-
-
-Supercold.Game.prototype.restart = function restart() {
-    hideTip();
-    this.state.restart(CLEAR_WORLD, !CLEAR_CACHE, {level: this.level});
-};
-
-Supercold.Game.prototype.quit = function quit() {
-    hideTip();
-    log('\nThank you for playing! :)');
-    this.state.start('MainMenu');
-};
-
-Supercold.Game.prototype.create = function() {
-    var radius = Supercold.player.radius * this._spriteScale, player, boundsColGroup;
-
-    if (DEBUG) log('Creating Game state: Level ' + this.level + '...');
-
-    // Scaling should be specified first.
-    this.setScaling();
-
-    this.addBackground();
-
-    this._superhotFx = this.add.audio('superhot');
-    this._superhotFx.addMarker('super', 0, 0.825);
-    this._superhotFx.addMarker('hot', 0.825, 0.775);
-
-    // Collision groups for the player, the bots, the bullets and the bounds.
-    this._colGroups.player = this.physics.p2.createCollisionGroup();
-    this._colGroups.bots = this.physics.p2.createCollisionGroup();
-    this._colGroups.playerBullets = this.physics.p2.createCollisionGroup();
-    this._colGroups.botBullets = this.physics.p2.createCollisionGroup();
-    boundsColGroup = this.physics.p2.createCollisionGroup();
-
-    this.physics.p2.updateBoundsCollisionGroup();
-
-    this._bulletTrailPainter = new BulletTrailPainter(this.game);
-    // Create the bullet groups first, so that they are rendered under the bots.
-    this._groups.playerBullets = new BulletGroup(this.game, 'Player Bullets');
-    this._groups.botBullets = new BulletGroup(this.game, 'Bot Bullets');
-
-    this._addPlayerBounds(boundsColGroup);
-
-    // The player is positioned in a semi-random location inside their bounds.
-    this._sprites.player = player = new Player(
-        this.game,
-        this.rnd.sign() * this.rnd.between(
-            radius, this.bounds.right - PADDING.width - radius),
-        this.rnd.sign() * this.rnd.between(
-            radius, this.bounds.bottom - PADDING.height - radius));
-
-    player.body.setCollisionGroup(this._colGroups.player);
-    // The player collides with the bounds, the bots and the bullets.
-    player.body.collides([boundsColGroup, this._colGroups.bots]);
-    player.body.collides([this._colGroups.playerBullets, this._colGroups.botBullets],
-        function lose(player, bullet) {
-            var duration = 1500, overlay;
-
-            // The collision handler may be called more than once!
-            if (!player.sprite.alive) {
-                return;
-            }
-
-            bullet.sprite.kill();
-            if (this.superhot || this._mutators.godmode) {
-                return;
-            }
-
-            overlay = this.add.existing(newOverlay(this.game));
-            overlay.name = 'lose screen overlay';
-            overlay.alpha = 0;
-            this.add.tween(overlay).to({
-                alpha: 1
-            }, duration, Phaser.Easing.Linear.None, AUTOSTART)
-                .onComplete.addOnce(function restart() {
-                    this.time.events.add(Phaser.Timer.SECOND * 1.5, this.restart, this);
-                    this.time.events.add(Phaser.Timer.SECOND * 1.5, hideTip, this);
-                }, this);
-
-            player.sprite.kill();
-            // TODO: Add fancy effects.
-            this.camera.shake(0.00086, 1200, true, Phaser.Camera.SHAKE_HORIZONTAL, false);
-            showTipRnd();
-        }, this);
-
-    // The player is always in the center of the screen.
-    this.camera.follow(player);
-
-    this._groups.bots = new BotGroup(this.game, this._spriteScale);
+Supercold.Game.prototype._addBotInputHandler = function() {
     this._groups.bots.onChildInputDown.add(function hotswitch(bot, pointer) {
-        var properties = {
-            alpha: 0
-        }, duration = 400, playerTween, botTweeen;
+        var player = this._sprites.player,
+            properties = {
+                alpha: 0
+            }, duration = 400,
+            playerTween, botTweeen;
 
         if (DEBUG) log('Clicked on bot');
         // NOTE: Don't use Ctrl + left lick since it is a simulated right click!
@@ -2292,7 +2625,7 @@ Supercold.Game.prototype.create = function() {
         botTweeen = this.add.tween(bot).to(
             properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
         botTweeen.onComplete.addOnce(function swap() {
-            var temp;
+            var player = this._sprites.player, temp;
 
             // Make the camera move more smoothly for the hotswitch.
             this.camera.follow(player, Phaser.Camera.FOLLOW_LOCKON, 0.2, 0.2);
@@ -2311,7 +2644,7 @@ Supercold.Game.prototype.create = function() {
             playerTween.to(properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
             botTweeen.to(properties, duration, Phaser.Easing.Linear.None, AUTOSTART);
             this._nextHotSwitch = this._hotswitchTimeout;
-            botTweeen.onComplete.addOnce(function() {
+            botTweeen.onComplete.addOnce(function endHotswitch() {
                 // Reset the camera to its default behaviour.
                 this.camera.follow(player);
                 this._hotswitching = false;
@@ -2319,29 +2652,164 @@ Supercold.Game.prototype.create = function() {
             }, this);
         }, this);
     }, this);
+};
 
-    this._huds.minimap = new Minimap(this.game);
-    this._huds.bulletBar = new BulletBar(this.game);
-    this._huds.hotswitchBar = new HotswitchBar(this.game);
+Supercold.Game.prototype._positionHuds = function() {
+    var camera = this.camera, scale = camera.scale,
+        hud = this._huds.minimap.hudImage, refHud;
 
-    // Create controls.
-    this._controls.cursors = this.input.keyboard.createCursorKeys();
-    this._controls.wasd = this.input.keyboard.addKeys(Supercold.controls.WASD);
-    this._controls.fireKey = this.input.keyboard.addKey(Supercold.controls.fireKey);
-    this.input.keyboard.addKey(Supercold.controls.quitKey)
-        .onDown.addOnce(this.quit, this);
-    this.input.keyboard.addKey(Supercold.controls.restartKey)
-        .onDown.addOnce(this.restart, this);
+    // NOTE: Do not set anchor.x to 1, because this makes reload bars
+    // reload right to left! Let's handle anchoring ourselves instead.
 
-    // The player should render above all other game entities (except text).
-    player.bringToTop();
-    // Calling bringToTop after enabling debugging hides the debug body.
-    // http://phaser.io/docs/2.6.2/Phaser.Physics.P2.BodyDebug.html
-    if (DEBUG) this.world.bringToTop(player.body.debugBody);
+    // Reset scale to compute correct sizes and offsets.
+    // TODO: Find a clean way to do the positioning!
+    hud.scale.set(1);
+    hud.right = camera.width - Math.round(Supercold.minimap.x * scale.x);
+    hud.bottom = camera.height - Math.round(Supercold.minimap.y * scale.y);
+    hud.scale.set(1 / scale.x, 1 / scale.y);
+    hud.cameraOffset.set(hud.x, hud.y);
+
+    // At least 2 units on the y-axis so that bars do not touch on small screens!
+    refHud = hud;
+    hud = this._huds.hotswitchBar.hudImage;
+    hud.scale.set(1);
+    hud.alignTo(refHud, Phaser.TOP_LEFT, 0, 2 * scale.y);
+    hud.scale.set(1 / scale.x, 1 / scale.y);
+    hud.cameraOffset.set(hud.x, hud.y);
+    refHud = hud;
+    hud = this._huds.bulletBar.hudImage;
+    hud.scale.set(1);
+    hud.alignTo(refHud, Phaser.TOP_LEFT, 0, 2 * scale.y);
+    hud.scale.set(1 / scale.x, 1 / scale.y);
+    hud.cameraOffset.set(hud.x, hud.y);
+};
+
+Supercold.Game.prototype._lose = function(player, bullet) {
+    var duration = 1500;
+
+    bullet.sprite.kill();
+    // The collision handler may be called more than once!
+    if (!player.sprite.alive) {
+        return;
+    }
+    // If we have already won or we are in godmode, don't lose!
+    if (this.superhot || this._mutators.godmode) {
+        return;
+    }
+
+    this._overlay = this.add.existing(newOverlay(this.game));
+    this._overlay.name = 'lose screen overlay';
+    this._overlay.alpha = 0;
+    this.add.tween(this._overlay).to({
+        alpha: 1
+    }, duration, Phaser.Easing.Linear.None, AUTOSTART)
+        .onComplete.addOnce(function restart() {
+            this.time.events.add(Phaser.Timer.SECOND * 1.5, this.restart, this);
+            this.time.events.add(Phaser.Timer.SECOND * 1.5, hideTip, this);
+        }, this);
+
+    player.sprite.kill();
+    // TODO: Add fancy effects.
+    this.camera.shake(0.00086, 1200, true, Phaser.Camera.SHAKE_HORIZONTAL, false);
+    showTipRnd();
+};
+
+Supercold.Game.prototype._superhot = function() {
+    var DELAY = 100, newLevel = this.level + 1;
+
+    this._sprites.player.body.setZeroVelocity();
+
+    // TODO: Add fancy effect.
+    Supercold.storage.saveLevel(newLevel);
+    this.time.events.add(DELAY, function superhot() {
+        var announcer = new Announcer(this.game, Supercold.texts.SUPERHOT, {
+                nextDelay: 650,
+                finalDelay: 400,
+                repeat: true,
+                overlay: true,
+                overlayColor: 'light'
+            }),
+            superDuration = announcer.options.nextDelay + announcer.options.duration,
+            hotDuration = announcer.options.finalDelay + announcer.options.duration,
+            duration = superDuration + hotDuration,
+            times = 3, delay = times * duration, i;
+
+        for (i = 0; i < times; ++i) {
+            this.time.events.add(i*duration, function saySuper() {
+                this._superhotFx.play('super');
+            }, this);
+            this.time.events.add(i*duration + superDuration, function sayHot() {
+                this._superhotFx.play('hot');
+            }, this);
+        }
+        this._announcer = announcer.announce();
+
+        this.time.events.add(delay, function nextLevel() {
+            this.state.start('Game', CLEAR_WORLD, !CLEAR_CACHE, {
+                level: newLevel
+            });
+        }, this);
+    }, this);
+};
+
+Supercold.Game.prototype._botKillHandler = function(bot, bullet, _botS, _bulletS) {
+    bot.sprite.kill();
+    bullet.sprite.kill();
+    if (this.superhot) {
+        this._superhot();       // SUPER HOT!
+    }
+};
+
+/**
+ * Spawns the next bot.
+ * @param {boolean} [closer=false] - If true, spawns the bot closer to the player.
+ */
+Supercold.Game.prototype._spawnBot = function(closer) {
+    var player = this._sprites.player, colGroups = this._colGroups,
+        radius = ((NATIVE_WIDTH + NATIVE_HEIGHT) / 2) / 2,
+        angle, x, y, bot;
+
+    if (closer) {
+        radius -= (Supercold.player.radius * 2) * 2;
+    }
+    angle = this.rnd.realInRange(0, Math.PI * 2);
+    x = player.x + (radius * Math.cos(angle));
+    y = player.y + (radius * Math.sin(angle));
+
+    // If out of bounds, bring it back in.
+    if (x < 0) {
+        x = Math.max(x, this.world.bounds.left);
+    } else {
+        x = Math.min(x, this.world.bounds.right);
+    }
+    if (y < 0) {
+        y = Math.max(y, this.world.bounds.top);
+    } else {
+        y = Math.min(y, this.world.bounds.bottom);
+    }
+
+    --this._totalBotCount;
+
+    bot = this._groups.bots.getFirstDead(true, x, y);
+    // Fade into existence.
+    bot.alpha = 0.1;
+    this.add.tween(bot).to({
+        alpha: 1
+    }, 800, Phaser.Easing.Linear.None, AUTOSTART);
+
+    bot.body.setCollisionGroup(colGroups.bots);
+    // Bots collide against themselves, the player and all bullets.
+    bot.body.collides([colGroups.bots, colGroups.player]);
+    bot.body.collides([colGroups.botBullets, colGroups.playerBullets],
+                      this._botKillHandler, this);
+};
+
+Supercold.Game.prototype._announce = function() {
+    var levelText;
 
     if (this.level === 1) {
         // If the player just started playing, explain the game mechanics.
-        new Announcer(this.game, Supercold.texts.MECHANICS.split(' '), {
+        this._announcer = new Announcer(this.game, Supercold.texts.MECHANICS, {
             initDelay: 750,
             duration: 250,
             nextDelay: 250,
@@ -2350,30 +2818,118 @@ Supercold.Game.prototype.create = function() {
         }).announce();
     } else {
         // Otherwise, simply tell in which level they are in.
-        new Announcer(this.game, [Supercold.texts.LEVEL + ' ' + this.level], {
-            initDelay: 700,
+        levelText = Supercold.texts.LEVEL + ' ' + this.level;
+        this._announcer = new Announcer(this.game, [levelText], {
+            initDelay: 750,
             duration: 500,
             finalDelay: 250,
             flashTint: 0x4A4A4A,
             flashOffDuration: 800
         }).announce();
     }
+};
 
-    // Spawn the first bot.
-    // Use a timer so that it won't spawn in this method (messes with camera).
-    this.time.events.add(1, function() {
-        this._spawnBot(true);
-    }, this);
-    // Decide when to spawn the next bot.
+
+Supercold.Game.prototype.restart = function restart() {
+    hideTip();
+    this.state.restart(CLEAR_WORLD, !CLEAR_CACHE, {level: this.level});
+};
+
+Supercold.Game.prototype.quit = function quit() {
+    hideTip();
+    log('\nThank you for playing! :)');
+    this.state.start('MainMenu');
+};
+
+
+Supercold.Game.prototype.create = function() {
+    var radius = Supercold.player.radius * this._spriteScale, player, boundsColGroup;
+
+    if (DEBUG) log('Creating Game state: Level ' + this.level + '...');
+
+    // Scaling should be specified first.
+    this.setScaling();
+
+    this._sprites.background = this.addBackground();
+
+    this._superhotFx = this.add.audio('superhot');
+    this._superhotFx.addMarker('super', 0, 0.825);
+    this._superhotFx.addMarker('hot', 0.825, 0.775);
+
+    // Collision groups for the player, the bots, the bullets and the bounds.
+    this._colGroups.player = this.physics.p2.createCollisionGroup();
+    this._colGroups.bots = this.physics.p2.createCollisionGroup();
+    this._colGroups.playerBullets = this.physics.p2.createCollisionGroup();
+    this._colGroups.botBullets = this.physics.p2.createCollisionGroup();
+    boundsColGroup = this.physics.p2.createCollisionGroup();
+
+    this.physics.p2.updateBoundsCollisionGroup();
+
+    this._bulletTrailPainter = new BulletTrailPainter(this.game);
+    // Create the bullet groups first, so that they are rendered under the bots.
+    this._groups.playerBullets = new BulletGroup(this.game, 1, 'Player Bullets');
+    this._groups.botBullets = new BulletGroup(this.game, 1, 'Bot Bullets');
+
+    this._addPlayerBounds(boundsColGroup);
+
+    // The player is positioned in a semi-random location inside their bounds.
+    this._sprites.player = player = new Player(
+        this.game,
+        this.rnd.sign() * this.rnd.between(
+            radius, this.world.bounds.right - PADDING.width - radius),
+        this.rnd.sign() * this.rnd.between(
+            radius, this.world.bounds.bottom - PADDING.height - radius));
+    player.body.setCollisionGroup(this._colGroups.player);
+    // The player collides with the bounds, the bots and the bullets.
+    player.body.collides([boundsColGroup, this._colGroups.bots]);
+    player.body.collides([this._colGroups.playerBullets, this._colGroups.botBullets],
+                         this._lose, this);
+
+    // The player is always in the center of the screen.
+    this.camera.follow(player);
+
+    this._groups.bots = new BotGroup(this.game, this._spriteScale);
+    this._addBotInputHandler();
+
+    // Add HUDs.
+    this._huds.minimap = new Minimap(
+        this.game, 0, 0, Supercold.minimap.width, Supercold.minimap.height);
+    this._huds.hotswitchBar = new HotswitchBar(
+        this.game, 0, 0, Supercold.bar.width, Supercold.bar.height);
+    this._huds.bulletBar = new BulletBar(
+        this.game, 0, 0, Supercold.bar.width, Supercold.bar.height);
+    // and fix their position on the screen.
+    this._positionHuds();
+
+    // Add controls.
+    this._controls.cursors = this.input.keyboard.createCursorKeys();
+    this._controls.wasd = this.input.keyboard.addKeys(Supercold.controls.WASD);
+    this._controls.fireKey = this.input.keyboard.addKey(Supercold.controls.fireKey);
+    this.input.keyboard.addKey(Supercold.controls.quitKey)
+        .onDown.addOnce(this.quit, this);
+    this.input.keyboard.addKey(Supercold.controls.restartKey)
+        .onDown.addOnce(this.restart, this);
+
+    // The player should render above all other game entities (except text and UI).
+    player.bringToTop();
+    // Calling bringToTop after enabling debugging hides the debug body.
+    // http://phaser.io/docs/2.6.2/Phaser.Physics.P2.BodyDebug.html
+    if (DEBUG) this.world.bringToTop(player.body.debugBody);
+
+    // Spawn the first bot immediately.
+    this._spawnBot(true);
+    // Decide when to spawn the 2nd bot. It will be spawned faster than the rest.
     this._nextBotTime = this.rnd.realInRange(0.06, 0.12);
     this._nextHotSwitch = this._hotswitchTimeout;
     this._hotswitching = false;
-    this._fireRate = (this._mutators.fastgun) ? Supercold.fastFireRate : Supercold.fireRate;
+    this._fireRate =
+        (this._mutators.fastgun) ? Supercold.fastFireRate : Supercold.fireRate;
 
     // We need to handle the shaking of the bullet bar separately to avoid
     // shaking immediately after a bullet is fired and to allow the player
     // to keep the fire control pressed without constanlty shaking the bar.
     function onFireControl(buttonOrKey) {
+        /*jshint validthis: true */
         if (!buttonOrKey.shiftKey) {            // not trying to hotswitch
             if (player.remainingTime > 0) {
                 this._huds.bulletBar.shake();
@@ -2382,6 +2938,8 @@ Supercold.Game.prototype.create = function() {
     }
     this.input.activePointer.leftButton.onDown.add(onFireControl, this);
     this._controls.fireKey.onDown.add(onFireControl, this);
+
+    this._announce();
 };
 
 
@@ -2422,6 +2980,7 @@ Supercold.Game.prototype._resetBullet = function(bullet, sprite) {
     bullet.reset(
         sprite.x + offset*Math.cos(sprite.body.rotation),
         sprite.y + offset*Math.sin(sprite.body.rotation));
+    bullet.owner = sprite;
     bullet.body.rotation = sprite.body.rotation;
     // Dispatch the onRevived signal after setting rotation.
     bullet.revive();
@@ -2429,40 +2988,43 @@ Supercold.Game.prototype._resetBullet = function(bullet, sprite) {
 
 Supercold.Game.prototype._fireBullet = function(bullet, sprite, fireRate) {
     this._resetBullet(bullet, sprite);
-    bullet.owner = sprite;
     sprite.remainingTime = fireRate;
 };
 
 Supercold.Game.prototype._firePlayerBullet = function() {
-    var player = this._sprites.player;
+    var player = this._sprites.player, bullets = this._groups.playerBullets;
 
     // Not ready to fire yet or no bullets left.
     if (player.remainingTime > 0 || this._bulletCount === 0) {
         return false;
     }
-    if (DEBUG) log('Player bullet exists:', this._groups.playerBullets.getFirstExists(false) !== null);
-    this._fireBullet(
-        this._groups.playerBullets.getFirstExists(false) || this._createPlayerBullet(),
-        player, this._fireRate);
+    if (DEBUG) {
+        log('Player bullet exists:', bullets.getFirstExists(false) !== null);
+    }
+    this._fireBullet(bullets.getFirstExists(false) || this._createPlayerBullet(),
+                     player, this._fireRate);
     --this._bulletCount;
     return true;
 };
 
 Supercold.Game.prototype._fireBotBullet = function(bot) {
+    var bullets = this._groups.botBullets;
+
     // Not ready to fire yet.
     if (bot.remainingTime > 0) {
         return;
     }
     // Wait sometimes before firing to make things a bit more unpredictable.
-    if (this.rnd.frac() <= 1/3) {
+    if (this.rnd.frac() <= 1/4) {
         bot.remainingTime = this.rnd.between(
             0, Math.max(Supercold.fireRate * (1 - this.level/100), 0));
         return;
     }
-    if (DEBUG) log('Bot bullet exists:', this._groups.botBullets.getFirstExists(false) !== null);
-    this._fireBullet(
-        this._groups.botBullets.getFirstExists(false) || this._createBotBullet(),
-        bot, Supercold.fireRate);
+    if (DEBUG) {
+        log('Bot bullet exists:', bullets.getFirstExists(false) !== null);
+    }
+    this._fireBullet(bullets.getFirstExists(false) || this._createBotBullet(),
+                     bot, Supercold.fireRate);
 };
 
 Supercold.Game.prototype._advanceBullet = function(bullet, speed) {
@@ -2498,8 +3060,9 @@ Supercold.Game.prototype._advanceBot = function(
     // TODO: Consider more complicated movement patterns.
     moveForward(bot.body, bot.body.rotation, speed);
 
-    // Dodge sometimes (chance: 1 / (60fps * 3sec)).
-    if (this.rnd.frac() <= 1 / (this.time.desiredFps * 3)) {
+    // Dodge sometimes (chance: 1 / (60fps * 2sec * slowFactor)).
+    if (this.rnd.frac() <= 1 / (this.time.desiredFps * 2 *
+            this.time.physicsElapsed/elapsedTime)) {
         bot.dodging = true;
         bot.duration = 0.25 + 0.005*this.level;   // secs
         bot.direction = (this.rnd.between(0, 1)) ? 'left' : 'right';
@@ -2614,7 +3177,7 @@ Supercold.Game.prototype.update = function() {
     this._groups.botBullets.forEachAlive(
         this._advanceBullet, this, bulletSpeed);
     this._bulletTrailPainter.updateTrails(elapsedTime);
-    // Update the minimap.
+    // Update the HUDs.
     this._huds.minimap.update(player, this._groups.bots);
     if (player.alive) {
         this._huds.bulletBar.update(
@@ -2626,7 +3189,42 @@ Supercold.Game.prototype.update = function() {
 
 
 /**
- * Performs final cleanup.
+ * Handles browser resizing. Called automatically by our Phaser game.
+ *
+ * @param {number} width - the new width
+ * @param {number} height - the new height
+ * @override
+ */
+Supercold.Game.prototype.resize = function(width, height) {
+    var scale = this.world.scale;
+
+    Supercold._BaseState.prototype.resize.call(this, width, height);
+
+    // Resize all sprites to account for the new scale of our world.
+    this._sprites.player.resize(scale);
+
+    this._groups.bots.resize(scale);
+    this._groups.playerBullets.resize(scale);
+    this._groups.botBullets.resize(scale);
+
+    this._bulletTrailPainter.resize();
+
+    this._huds.minimap.resize(0, 0);
+    this._huds.hotswitchBar.resize(0, 0);
+    this._huds.bulletBar.resize(0, 0);
+    this._positionHuds();
+
+    this._announcer.resize();
+
+    this.rescale(this._sprites.background);
+    if (this._overlay) {
+        this.rescale(this._overlay);
+    }
+};
+
+
+/**
+ * Performs final cleanup. Called automatically by our Phaser game.
  */
 Supercold.Game.prototype.shutdown = function() {
     /*

@@ -305,9 +305,9 @@ button:hover {
     width: 100%;
     text-align: center;
     font-size: 1.5em;
-    color: rgb(245, 251, 255);
-    text-shadow: 0 -1px 7px rgba(242, 251, 255, 1),
-                 0  1px 7px rgba(242, 251, 255, 1);
+    color: rgb(242, 251, 255);
+    text-shadow: 0 -1px 7px rgba(242, 251, 255, 0.975),
+                 0  1px 7px rgba(242, 251, 255, 0.975);
 }
 #tips {
     top: 13%;
