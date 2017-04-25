@@ -470,9 +470,9 @@ var Supercold = {
             shadowBlur: 2
         },
         grid: {
-            color1: 'rgba(250, 240, 240, 1)',
-            color2: 'rgba(240, 240, 250, 1)',
-            colorOuter: 'rgba(242, 36, 35, 1)',
+            color1: 'rgba(250, 240, 230, 1)',
+            color2: 'rgba(230, 240, 250, 1)',
+            colorOuter: 'rgba(240, 35, 34, 1)',
             shadowOffsetX: 0,
             shadowOffsetY: 0,
             shadowColor1: 'rgba(240, 240, 255, 0.5)',
@@ -1408,6 +1408,11 @@ Supercold._BaseState.prototype._makeBackgroundBitmap = function() {
 
     bmd = this.getBitmapData2(scaledPaddedWidth, scaledPaddedHeight, CACHE.KEY.BG);
     cellbmd = this.make.bitmapData(scaledCellWidth, scaledCellHeight);
+
+    // Disable image smoothing to keep the cells drawn with createPattern crisp!
+    // Unfortunately, this feature is not supported that well. It's something...
+    // developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/imageSmoothingEnabled
+    Phaser.Canvas.setSmoothingEnabled(bmd.ctx, false);
 
     // Draw dark cells everywhere.
     drawCell(style.background.darkColor,
