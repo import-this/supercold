@@ -247,6 +247,8 @@ var CLEAR_WORLD = true,
     CLEAR_CACHE = true,
     ADD_TO_CACHE = true,
     AUTOSTART = true,
+    EXISTS = true,
+    CREATE_IF_NULL = true,
     USE_WORLD_COORDS = true,
     /**
      * Use the more expensive but powerful P2 physics system. The others don't cut it.
@@ -675,6 +677,7 @@ function _resize() {
 
 /**
  * An image that is always centered in the camera view.
+ * @constructor
  */
 function CenteredImage(game, key) {
     Phaser.Image.call(this, game, 0, 0, key);
@@ -694,6 +697,7 @@ CenteredImage.prototype.resize = _resize;
 
 /**
  * Text that is always centered in the camera view.
+ * @constructor
  */
 function CenteredText(game, text, style) {
     Phaser.Text.call(this, game, 0, 0, text, style);
@@ -713,6 +717,7 @@ CenteredText.prototype.resize = _resize;
 
 /**
  * Text that is scaled and always centered in the camera view.
+ * @constructor
  */
 function ScaledCenteredText(game, text, style) {
     style = Phaser.Utils.extend({}, style);
@@ -806,6 +811,7 @@ function newOverlay(game, color) {
  *      Specify a 'light' or 'dark' shade for the overlay.
  * @param {function} [options.onComplete=noop] -
  *      A function to call once the announcer is done.
+ * @constructor
  */
 function Announcer(game, text, options) {
     this.options = Phaser.Utils.extend({}, Announcer.defaults, options);
@@ -1021,6 +1027,7 @@ function hideTip() {
  * A state that supports a scalable viewport.
  * The currect scale factor is the same as world.scale
  * (which in turn is the same as camera.scale in Phaser).
+ * @constructor
  */
 Supercold._ScalableState = function(game) {};
 
@@ -1087,6 +1094,7 @@ Supercold._ScalableState.prototype.rescale = function(sprite) {
  * State used as a base class for almost all other game states.
  * Provides methods for scaling the game, handling drawing of all sprites
  * and redrawing when resizing, debugging and other common functionality.
+ * @constructor
  */
 Supercold._BaseState = function(game) {
     Supercold._ScalableState.call(this, game);
@@ -1529,6 +1537,7 @@ Supercold._BaseState.prototype.render = function() {
  * State used to boot the game.
  * This state is used to perform any operations that should only be
  * executed once for the entire game (e.g. setting game options, etc.).
+ * @constructor
  */
 Supercold.Boot = function(game) {};
 
@@ -1571,6 +1580,7 @@ Supercold.Boot.prototype.create = function() {
 
 /**
  * State used for loading or creating any assets needed in the game.
+ * @constructor
  */
 Supercold.Preloader = function(game) {
     Supercold._BaseState.call(this, game);
@@ -1608,6 +1618,9 @@ Supercold.Preloader.prototype.update = function() {
 
 /***************************** Main Menu State ****************************/
 
+/**
+ * @constructor
+ */
 Supercold.MainMenu = function(game) {
     Supercold._BaseState.call(this, game);
 
@@ -1645,6 +1658,9 @@ Supercold.MainMenu.prototype.resize = function(width, height) {
 
 /******************************* Intro State ******************************/
 
+/**
+ * @constructor
+ */
 Supercold.Intro = function(game) {
     Supercold._BaseState.call(this, game);
 
@@ -1698,6 +1714,7 @@ Supercold.Intro.prototype.resize = function(width, height) {
 /**
  * A generic sprite for our game.
  * It provides useful methods for handling the Phaser World scaling.
+ * @constructor
  */
 function Sprite(game, x, y, key, _frame) {
     Phaser.Sprite.call(this, game, x, y, key, _frame);
@@ -1709,6 +1726,7 @@ Sprite.prototype.constructor = Sprite;
 
 /**
  * One of the game's live entities, i.e. the player or a bot.
+ * @constructor
  * @abstract
  */
 function LiveSprite(game, x, y, key, _frame) {
@@ -1717,6 +1735,8 @@ function LiveSprite(game, x, y, key, _frame) {
     this.name = 'LiveSprite';
     // Time until the next bullet can be fired.
     this.remainingTime = 0;
+    // A Weapon to shoot with.
+    this.weapon = null;
 }
 
 LiveSprite.prototype = Object.create(Sprite.prototype);
@@ -1730,16 +1750,27 @@ LiveSprite.prototype.constructor = LiveSprite;
 LiveSprite.prototype.reset = function(x, y, _health) {
     Sprite.prototype.reset.call(this, x, y, _health);
     this.remainingTime = 0;
+    this.weapon = null;
+};
+
+/**
+ * Fires the weapon that the entity holds.
+ */
+LiveSprite.prototype.fire = function() {
+    if (DEBUG) log('Bullet exists:', !!this.weapon.bullets.getFirstExists(!EXISTS));
+    this.weapon.fire(this);
 };
 
 /**
  * The player.
+ * @constructor
  */
 function Player(game, x, y, scale) {
     LiveSprite.call(this, game, x, y, game.cache.getBitmapData(CACHE.KEY.PLAYER));
 
     this.name = 'Player';
     this.baseScale = scale || 1;
+    this.radius = Supercold.player.radius * this.baseScale;
 
     this.game.add.existing(this);
 
@@ -1776,12 +1807,9 @@ Player.prototype.rotate = function() {
 
 };
 
-Player.prototype.fire = function() {
-
-};
-
 /**
  * A bot.
+ * @constructor
  */
 function Bot(game, x, y, _key, _frame) {
     LiveSprite.call(this, game, x, y, game.cache.getBitmapData(CACHE.KEY.BOT));
@@ -1799,6 +1827,8 @@ function Bot(game, x, y, _key, _frame) {
      * How long it will dodge.
      */
     this.duration = 0;
+
+    this.radius = -1;
 
     // Don't fire immediately!
     this.remainingTime = Supercold.initFireDelay;
@@ -1827,16 +1857,105 @@ Bot.prototype.reset = function(x, y, _health) {
     this.duration = 0;
 };
 
-Bot.prototype.fire = function() {
-
-};
-
 Bot.prototype.advance = function() {
 
 };
 
+
 /**
- * A bullet fired from a LiveSprite.
+ * A weapon. Abstract base class.
+ * @param {BulletGroup} bullets - A group of bullets.
+ * @constructor
+ * @abstract
+ */
+function Weapon(bullets) {
+    this.bullets = bullets;
+}
+
+/**
+ * Utility method. Positions the given bullet in front of the entity specified.
+ * @param {Bullet} bullet - The bullet to be placed.
+ * @param {LiveSprite} entity - The entity that fired the bullet.
+ * @param {number} rotation - The rotation of the bullet (in radians).
+ * @protected
+ */
+Weapon.prototype._fire = function(bullet, entity, rotation) {
+    // Place the bullet in front of the sprite, so that they don't collide!
+    var offset = entity.radius + Math.round(3/4 * Supercold.bullet.width);
+
+    bullet.reset(
+        entity.x + offset*Math.cos(rotation),
+        entity.y + offset*Math.sin(rotation));
+    bullet.owner = entity;
+    bullet.body.rotation = rotation;
+    // Dispatch the onRevived signal after setting rotation.
+    bullet.revive();
+};
+
+/**
+ * Fires bullets.
+ * @param {LiveSprite} entity - The entity that holds the weapon.
+ * @override
+ */
+Weapon.prototype.fire = function(entity) {
+    throw new Error('Abstract base class');
+};
+
+/**
+ * A pistol. Fires one bullet at a time.
+ * @param {BulletGroup} bullets - A group of bullets.
+ * @constructor
+ */
+function Pistol(bullets) {
+    Weapon.call(this, bullets);
+}
+
+Pistol.prototype = Object.create(Weapon.prototype);
+Pistol.prototype.constructor = Pistol;
+
+/**
+ * Fires a bullet.
+ * @param {LiveSprite} entity - The entity that holds the weapon.
+ */
+Pistol.prototype.fire = function(entity) {
+    var bullet = this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL);
+
+    Weapon.prototype._fire.call(this, bullet, entity, entity.body.rotation);
+};
+
+/**
+ * A shotgun. Fires many bullets at once.
+ * @param {BulletGroup} bullets - A group of bullets.
+ * @constructor
+ */
+function Shotgun(bullets) {
+    Weapon.call(this, bullets);
+}
+
+Shotgun.prototype = Object.create(Weapon.prototype);
+Shotgun.prototype.constructor = Shotgun;
+
+Shotgun.angle = 20 * Math.PI / 180;     // 20 degrees
+
+/**
+ * Fires multiple bullets.
+ * @param {LiveSprite} entity - The entity that holds the weapon.
+ */
+Shotgun.prototype.fire = function(entity) {
+    var a = Shotgun.angle, bullet;
+
+    bullet = this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL);
+    Weapon.prototype._fire.call(this, bullet, entity, entity.body.rotation - a);
+    bullet = this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL);
+    Weapon.prototype._fire.call(this, bullet, entity, entity.body.rotation);
+    bullet = this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL);
+    Weapon.prototype._fire.call(this, bullet, entity, entity.body.rotation + a);
+};
+
+
+/**
+ * A bullet fired from a Weapon.
+ * @constructor
  */
 function Bullet(game, x, y, _key, _frame) {
     Sprite.call(this, game, x, y, game.cache.getBitmapData(CACHE.KEY.BULLET));
@@ -1908,6 +2027,7 @@ Bullet.prototype.preUpdate = function() {
 
 /**
  * The trail that a bullet leaves behind.
+ * @constructor
  */
 function BulletTrail(game, x, y, _key, _frame) {
     Phaser.Image.call(this, game, x, y, game.cache.getBitmapData(CACHE.KEY.TRAIL));
@@ -1974,6 +2094,7 @@ BulletTrail.prototype.stop = function() {
  * @param {Phaser.Game} game - A reference to the currently running Game.
  * @param {number} [scale=1] - The base scale for this group.
  * @param {string} [name='group'] - A name for this group.
+ * @constructor
  */
 function Group(game, scale, name, _parent) {
     Phaser.Group.call(this, game, _parent, name, false, true, PHYSICS_SYSTEM);
@@ -2019,6 +2140,7 @@ Group.prototype.resize = function(worldScale) {
  * A group of 'Bot's with enabled physics.
  * @param {Phaser.Game} game - A reference to the currently running Game.
  * @param {number} [scale=1] - The base scale for this group.
+ * @constructor
  */
 function BotGroup(game, scale) {
     Group.call(this, game, scale, 'Bots');
@@ -2039,8 +2161,9 @@ BotGroup.prototype.create = function(x, y, _key, _frame) {
     var bot = Group.prototype.create.call(this, x, y, null, null);
 
     if (DEBUG) this.extendChildName(bot);
+    bot.radius = Supercold.player.radius * this.baseScale;
     bot.scale.copyFrom(this.finalScale);
-    bot.body.setCircle(Supercold.player.radius * this.baseScale);
+    bot.body.setCircle(bot.radius);
     bot.body.debug = DEBUG;
 
     // Players may click near the bot to shoot.
@@ -2056,10 +2179,13 @@ BotGroup.prototype.create = function(x, y, _key, _frame) {
  * A group of 'Bullet's with enabled physics.
  * @param {Phaser.Game} game - A reference to the currently running Game.
  * @param {number} [scale=1] - The base scale for this group.
+ * @param {function(Bullet)} customizer - A function that customizes a bullet.
+ * @constructor
  */
-function BulletGroup(game, scale, name) {
+function BulletGroup(game, scale, customizer, name) {
     Group.call(this, game, scale, name || 'Bullets');
     this.classType = Bullet;
+    this.customizer = customizer;
 }
 
 BulletGroup.prototype = Object.create(Group.prototype);
@@ -2090,12 +2216,15 @@ BulletGroup.prototype.create = function(_x, _y, _key, _frame) {
     bullet.body.collideWorldBounds = false;
     bullet.body.debug = DEBUG;
 
+    this.customizer(bullet);
+
     return bullet;
 };
 
 /**
  * A group of 'BulletTrail's.
  * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @constructor
  */
 function BulletTrailGroup(game, _name) {
     Group.call(this, game, 1, 'BulletTrails');
@@ -2143,6 +2272,7 @@ BulletTrailGroup.prototype.resize = function(worldScale) {
 /**
  * An object that draws trails behind bullets.
  * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @constructor
  */
 function BulletTrailPainter(game) {
     this.game = game;
@@ -2161,7 +2291,7 @@ BulletTrailPainter.prototype.resize = function() {
 };
 
 BulletTrailPainter.prototype.startTrail = function(bullet) {
-    var trail = this.trails.getFirstDead(true, bullet.x, bullet.y);
+    var trail = this.trails.getFirstDead(CREATE_IF_NULL, bullet.x, bullet.y);
 
     trail.start(bullet);
     this._liveTrails[bullet.name] = trail;
@@ -2216,6 +2346,7 @@ BulletTrailPainter.prototype.updateTrails = function(elapsedTime) {
  * @param {number} width - The width of the HUD.
  * @param {number} height - The height of the HUD.
  * @param {string} key - A key for the Phaser chache.
+ * @constructor
  * @abstract
  */
 function HUD(game, x, y, width, height, key) {
@@ -2269,6 +2400,7 @@ HUD.prototype.update = function() {
  * @param {number} y - The y-coordinate of the top-left corner of the minimap.
  * @param {number} width - The width of the minimap.
  * @param {number} height - The height of the minimap.
+ * @constructor
  */
 function Minimap(game, x, y, width, height) {
     HUD.call(this, game, x, y, width, height, 'Minimap');
@@ -2361,6 +2493,7 @@ Minimap.prototype.update = function(player, bots) {
  * @param {number} width - The width of the reload bar.
  * @param {number} height - The height of the reload bar.
  * @param {string} key - A key for the Phaser chache.
+ * @constructor
  */
 function ReloadBar(game, x, y, width, height, key, fillStyle) {
     HUD.call(this, game, x, y, Supercold.bar.width, Supercold.bar.height, key);
@@ -2428,6 +2561,7 @@ ReloadBar.prototype.shake = function() {
  * @param {number} y - The y-coordinate of the top-left corner of the hotswitch bar.
  * @param {number} width - The width of the hotswitch bar.
  * @param {number} height - The height of the hotswitch bar.
+ * @constructor
  */
 function HotswitchBar(game, x, y, width, height) {
     ReloadBar.call(this, game, x, y, width, height, 'HotswitchBar',
@@ -2443,6 +2577,7 @@ HotswitchBar.prototype.constructor = HotswitchBar;
  * @param {number} y - The y-coordinate of the top-left corner of the bullet bar.
  * @param {number} width - The width of the bullet bar.
  * @param {number} height - The height of the bullet bar.
+ * @constructor
  */
 function BulletBar(game, x, y, width, height) {
     ReloadBar.call(this, game, x, y, width, height, 'BulletBar',
@@ -2455,6 +2590,9 @@ BulletBar.prototype.constructor = BulletBar;
 
 /***** The core of the game *****/
 
+/**
+ * @constructor
+ */
 Supercold.Game = function(game) {
     Supercold._BaseState.call(this, game);
 
@@ -2479,14 +2617,17 @@ Supercold.Game = function(game) {
         wasd: null,
         fireKey: null
     };
-    this._mutators = null;
-    this._bulletTrailPainter = null;
     this._huds = {
         minimap: null,
         bulletBar: null,
         hotswitchBar: null
     };
+    this._weapons = {
+        bot: null
+    };
 
+    this._mutators = null;
+    this._bulletTrailPainter = null;
     this._announcer = null;
     this._overlay = null;
     this._superhotFx = null;
@@ -2514,7 +2655,6 @@ Supercold.Game = function(game) {
 
 Supercold.Game.prototype = Object.create(Supercold._BaseState.prototype);
 Supercold.Game.prototype.constructor = Supercold.Game;
-
 
 Object.defineProperty(Supercold.Game.prototype, 'superhot', {
     get: function() {
@@ -2552,34 +2692,42 @@ function bulletHandler(myBullet, otherBullet) {
    // The other bullet will be killed by the other handler call.
 }
 
-Supercold.Game.prototype._startTrail = function(bullet) {
+function startTrail(bullet) {
+    /*jshint validthis: true */
     this._bulletTrailPainter.startTrail(bullet);
-};
-Supercold.Game.prototype._stopTrail = function(bullet) {
+}
+function stopTrail(bullet) {
+    /*jshint validthis: true */
     this._bulletTrailPainter.stopTrail(bullet);
+}
+
+Supercold.Game.prototype._addBulletGroups = function() {
+    var self = this;
+
+    function customizeBullet(bullet, myColGroup) {
+        bullet.events.onRevived.add(startTrail, self);
+        bullet.events.onKilled.add(stopTrail, self);
+        bullet.body.setCollisionGroup(myColGroup);
+        // All bullets collide with all other bullets and all live entities.
+        bullet.body.collides([self._colGroups.player, self._colGroups.bots]);
+        bullet.body.collides([self._colGroups.playerBullets, self._colGroups.botBullets],
+                             bulletHandler, self);
+    }
+
+    function customizePlayerBullet(bullet) {
+        customizeBullet(bullet, self._colGroups.playerBullets);
+    }
+    function customizeBotBullet(bullet) {
+        customizeBullet(bullet, self._colGroups.botBullets);
+    }
+
+    this._groups.playerBullets = new BulletGroup(
+        this.game, 1, customizePlayerBullet, 'Player Bullets');
+    this._groups.botBullets = new BulletGroup(
+        this.game, 1, customizeBotBullet, 'Bot Bullets');
 };
 
-Supercold.Game.prototype._createBullet = function(group, myColGroup) {
-    var bullet = group.create();
-
-    bullet.events.onRevived.add(this._startTrail, this);
-    bullet.events.onKilled.add(this._stopTrail, this);
-    bullet.body.setCollisionGroup(myColGroup);
-    // All bullets collide with all other bullets and all live entities.
-    bullet.body.collides([this._colGroups.player, this._colGroups.bots]);
-    bullet.body.collides([this._colGroups.playerBullets, this._colGroups.botBullets],
-                         bulletHandler, this);
-    return bullet;
-};
-
-Supercold.Game.prototype._createPlayerBullet = function() {
-    return this._createBullet(this._groups.playerBullets, this._colGroups.playerBullets);
-};
-Supercold.Game.prototype._createBotBullet = function() {
-    return this._createBullet(this._groups.botBullets, this._colGroups.botBullets);
-};
-
-Supercold.Game.prototype._createPlayerBound = function(rect, i, collisionGroup) {
+Supercold.Game.prototype._addPlayerBound = function(rect, i, collisionGroup) {
     var bound = this._groups.bounds.create(rect.x, rect.y, null);
 
     bound.name = 'Bound ' + i;
@@ -2629,7 +2777,7 @@ Supercold.Game.prototype._addPlayerBounds = function(collisionGroup) {
         PADDING.width * 2,
         bounds.height + 2*PADDING.height
     )].forEach(function(rect, index) {
-        this._createPlayerBound(rect, index, collisionGroup);
+        this._addPlayerBound(rect, index, collisionGroup);
     }, this);
 };
 
@@ -2873,7 +3021,9 @@ Supercold.Game.prototype._spawnBot = function(closer) {
 
     --this._totalBotCount;
 
-    bot = this._groups.bots.getFirstDead(true, x, y);
+    bot = this._groups.bots.getFirstDead(CREATE_IF_NULL, x, y);
+    // All bots share the same weapon.
+    bot.weapon = this._weapons.bot;
     // Fade into existence.
     bot.alpha = 0.1;
     this.add.tween(bot).to({
@@ -2926,7 +3076,8 @@ Supercold.Game.prototype.quit = function quit() {
 
 
 Supercold.Game.prototype.create = function() {
-    var radius = Supercold.player.radius * this._spriteScale, player, boundsColGroup;
+    var radius = Supercold.player.radius * this._spriteScale,
+        player, boundsColGroup;
 
     if (DEBUG) log('Creating Game state: Level ' + this.level + '...');
 
@@ -2950,8 +3101,8 @@ Supercold.Game.prototype.create = function() {
 
     this._bulletTrailPainter = new BulletTrailPainter(this.game);
     // Create the bullet groups first, so that they are rendered under the bots.
-    this._groups.playerBullets = new BulletGroup(this.game, 1, 'Player Bullets');
-    this._groups.botBullets = new BulletGroup(this.game, 1, 'Bot Bullets');
+    this._addBulletGroups();
+    this._weapons.bot = new Pistol(this._groups.botBullets);
 
     this._addPlayerBounds(boundsColGroup);
 
@@ -2959,9 +3110,12 @@ Supercold.Game.prototype.create = function() {
     this._sprites.player = player = new Player(
         this.game,
         this.rnd.sign() * this.rnd.between(
-            radius, this.world.bounds.right - PADDING.width - radius),
+            0, this.world.bounds.right - PADDING.width - radius),
         this.rnd.sign() * this.rnd.between(
-            radius, this.world.bounds.bottom - PADDING.height - radius));
+            0, this.world.bounds.bottom - PADDING.height - radius));
+    player.weapon = (this._mutators.shotgun) ?
+        new Shotgun(this._groups.playerBullets) :
+        new Pistol(this._groups.playerBullets);
     player.body.setCollisionGroup(this._colGroups.player);
     // The player collides with the bounds, the bots and the bullets.
     player.body.collides([boundsColGroup, this._colGroups.bots]);
@@ -3056,45 +3210,20 @@ Supercold.Game.prototype._getBulletSpeed = function(playerAlive, playerMoved, pl
     return this._getSpeed(playerAlive, playerMoved, playerRotated, Supercold.speeds.bullet);
 };
 
-Supercold.Game.prototype._resetBullet = function(bullet, sprite) {
-    // Place the bullet in front of the sprite, so that it doesn't kill it instantly.
-    var offset = Supercold.player.radius*this._spriteScale +
-            Math.round(3/4 * Supercold.bullet.width);
-
-    // Set the position of the bullet almost in front of the sprite.
-    bullet.reset(
-        sprite.x + offset*Math.cos(sprite.body.rotation),
-        sprite.y + offset*Math.sin(sprite.body.rotation));
-    bullet.owner = sprite;
-    bullet.body.rotation = sprite.body.rotation;
-    // Dispatch the onRevived signal after setting rotation.
-    bullet.revive();
-};
-
-Supercold.Game.prototype._fireBullet = function(bullet, sprite, fireRate) {
-    this._resetBullet(bullet, sprite);
-    sprite.remainingTime = fireRate;
-};
-
 Supercold.Game.prototype._firePlayerBullet = function() {
-    var player = this._sprites.player, bullets = this._groups.playerBullets;
+    var player = this._sprites.player;
 
     // Not ready to fire yet or no bullets left.
     if (player.remainingTime > 0 || this._bulletCount === 0) {
         return false;
     }
-    if (DEBUG) {
-        log('Player bullet exists:', bullets.getFirstExists(false) !== null);
-    }
-    this._fireBullet(bullets.getFirstExists(false) || this._createPlayerBullet(),
-                     player, this._fireRate);
+    player.fire();
+    player.remainingTime = this._fireRate;
     --this._bulletCount;
     return true;
 };
 
 Supercold.Game.prototype._fireBotBullet = function(bot) {
-    var bullets = this._groups.botBullets;
-
     // Not ready to fire yet.
     if (bot.remainingTime > 0) {
         return;
@@ -3105,11 +3234,8 @@ Supercold.Game.prototype._fireBotBullet = function(bot) {
             0, Math.max(Supercold.fireRate * (1 - this.level/100), 0));
         return;
     }
-    if (DEBUG) {
-        log('Bot bullet exists:', bullets.getFirstExists(false) !== null);
-    }
-    this._fireBullet(bullets.getFirstExists(false) || this._createBotBullet(),
-                     bot, Supercold.fireRate);
+    bot.fire();
+    bot.remainingTime = Supercold.fireRate;
 };
 
 Supercold.Game.prototype._advanceBullet = function(bullet, speed) {
