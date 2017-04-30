@@ -259,7 +259,8 @@ button:hover {
     display: inline-block;
     text-align: left;
 }
-.locked10, .locked20, .locked30, .locked40, .locked50, .locked60, .locked75, .locked100, .locked120 {
+.locked10, .locked20, .locked30, .locked40, .locked50, .locked60, .locked80,
+.locked100, .locked120, .locked150 {
     display: none;
 }
 

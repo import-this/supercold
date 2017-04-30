@@ -301,7 +301,7 @@ var NATIVE_WIDTH = 1366,
 
     FACTOR_SLOW = 16,
     FACTOR_SLOWER = 42,
-    FACTOR_FROZEN = 192,
+    FACTOR_SLOWEST = 192,
 
     PLAYER_SPEED = 300,
     BOT_SPEED_NORMAL = PLAYER_SPEED,
@@ -371,13 +371,13 @@ var Supercold = {
             normal: PLAYER_SPEED,
             slow: Math.round(BOT_SPEED_NORMAL / FACTOR_SLOW),
             slower: Math.round(BOT_SPEED_NORMAL / FACTOR_SLOWER),
-            frozen: Math.round(BOT_SPEED_NORMAL / FACTOR_FROZEN)
+            slowest: Math.round(BOT_SPEED_NORMAL / FACTOR_SLOWEST)
         },
         bullet: {
             normal: BULLET_SPEED_NORMAL,
             slow: Math.round(BULLET_SPEED_NORMAL / FACTOR_SLOW),
             slower: Math.round(BULLET_SPEED_NORMAL / FACTOR_SLOWER),
-            frozen: Math.round(BULLET_SPEED_NORMAL / FACTOR_FROZEN)
+            slowest: Math.round(BULLET_SPEED_NORMAL / FACTOR_SLOWEST)
         }
     },
 
@@ -3239,9 +3239,10 @@ function moveForward(body, rotation, speed) {
 Supercold.Game.prototype._getSpeed = function(playerAlive, playerMoved, playerRotated, speeds) {
     if (!playerAlive) return speeds.slow;
     if (playerMoved) return speeds.normal;
+    if (this._mutators.freezetime) return 0;
     if (this._mutators.fasttime) return speeds.slow;
     if (playerRotated) return speeds.slower;
-    return speeds.frozen;
+    return speeds.slowest;
 };
 
 Supercold.Game.prototype._getBotSpeed = function(playerAlive, playerMoved, playerRotated) {
@@ -3545,7 +3546,7 @@ function emptyClassName(selector) {
 }
 
 function showUnlockedMutators() {
-    var unlockLevels = [10, 20, 30, 40, 50, 60, 75, 100, 120], level, i;
+    var unlockLevels = [10, 20, 30, 40, 50, 60, 80, 100, 120, 150], level, i;
 
     level = Supercold.storage.loadHighestLevel();
     for (i = 0; i < unlockLevels.length; ++i) {
@@ -3598,6 +3599,7 @@ Supercold.play = function play(parent) {
             superhotswitch: false,
             lmtdbull: false,
             doge: false,
+            freezetime: false,
             godmode: false
         });
     }
