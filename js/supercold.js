@@ -46,11 +46,19 @@ function noop() {}
 
 /**
  * Handy shortcuts.
+ * Creating the shortcuts is unfortunately tricky, because of diffs in browsers:
+ *      https://github.com/whatwg/console/issues/3
  * @const
  */
-var log = console.log,
-    warn = console.warn,
-    error = console.error,
+var log = function log() {
+        Function.prototype.apply.call(console.log, console, arguments);
+    },
+    warn = function warn() {
+        Function.prototype.apply.call(console.warn, console, arguments);
+    },
+    error = function error() {
+        Function.prototype.apply.call(console.error, console, arguments);
+    },
     // Use assert only in DEBUG mode!
     assert = function assert(assertion) {
         console.assert.apply(console, arguments);
