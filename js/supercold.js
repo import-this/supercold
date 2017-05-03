@@ -63,7 +63,14 @@ var log = console.log,
 
 /********************************* Polyfills **********************************/
 
-// No polyfills needed (yet).
+if (String.prototype.startsWith === undefined) {
+    log('Undefined "String.prototype.startsWith". Using really bad polyfill...');
+
+    // http://stackoverflow.com/a/4579228/1751037
+    String.prototype.startsWith = function startsWith(prefix) {
+        return this.lastIndexOf(prefix, 0) === 0;
+    };
+}
 
 /******************************* Local Storage ********************************/
 
