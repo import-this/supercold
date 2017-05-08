@@ -24,8 +24,8 @@
  * Comments follow the conventions of JSDoc. Documentation can be found here:
  *     http://usejsdoc.org/
  *
- * Date: 15/2/2017
- * @version: 1.2.0
+ * Date: 7/5/2017
+ * @version: 1.3.0
  * @author Vasilis Poulimenos
  */
 
@@ -72,11 +72,20 @@ var log = function log() {
 /********************************* Polyfills **********************************/
 
 if (String.prototype.startsWith === undefined) {
-    log('Undefined "String.prototype.startsWith". Using really bad polyfill...');
+    warn('Undefined "String.prototype.startsWith". Using really bad polyfill...');
 
     // http://stackoverflow.com/a/4579228/1751037
     String.prototype.startsWith = function startsWith(prefix) {
         return this.lastIndexOf(prefix, 0) === 0;
+    };
+}
+
+if (Object.freeze === undefined) {
+    warn('Undefined "Object.freeze". Using noop polyfill...');
+
+    // https://github.com/es-shims/es5-shim/blob/master/es5-sham.js#L477
+    Object.freeze = function freeze(object) {
+        return object;
     };
 }
 
@@ -88,7 +97,8 @@ if (String.prototype.startsWith === undefined) {
  */
 
 /**
- * The version number. Useful for marking incompatible changes in the storage format.
+ * The version number.
+ * Useful for marking incompatible changes in the storage format.
  * @const {string}
  */
 var STORAGE_VERSION = '1.0.1';
@@ -112,6 +122,7 @@ var Keys = {
     // The last level that the player played.
     LEVEL: PREFIX + 'level',
     TIMES: PREFIX + 'times',
+    GUNS: PREFIX + 'guns',
     MUTATORS: PREFIX + 'mutators',
     RNDSTATE: PREFIX + 'rndstate'
 };
@@ -224,6 +235,13 @@ GameStorageManager.prototype.loadMutators = function() {
     return JSON.parse(this.load(Keys.MUTATORS));
 };
 
+GameStorageManager.prototype.saveGuns = function(guns) {
+    this.save(Keys.GUNS, JSON.stringify(guns));
+};
+GameStorageManager.prototype.loadGuns = function() {
+    return JSON.parse(this.load(Keys.GUNS));
+};
+
 GameStorageManager.prototype.saveRndState = function(state) {
     this.save(Keys.RNDSTATE, state);
 };
@@ -237,7 +255,7 @@ GameStorageManager.prototype.loadRndState = function() {
  * The game version. Not really used for anything right now.
  * @const
  */
-var VERSION = '1.2.0';
+var VERSION = '1.3.0';
 
 log('%c\n' +
     '      _____________ __________________________________  _________  ________  .____     ________              \n' +
@@ -396,8 +414,8 @@ var Supercold = {
         }
     },
 
-    fireRate: 1 / 2,            // 2 times per second
-    fastFireRate: 1 / 4,        // 4 times per second
+    baseFireRate: 1 / 2,            // 2 times / sec
+    fastFireFactor: 1 / 2,          // Twice as fast
     initFireDelay: 1 / 8,
 
     hotswitchTimeout: 2.5,
@@ -615,18 +633,16 @@ var Supercold = {
 };
 
 // Freeze objects to detect erroneous overriding.
-if (Object.freeze) {
-    (function recursiveFreeze(obj) {
-        var prop;
+(function recursiveFreeze(obj) {
+    var prop;
 
-        for (prop in obj) {
-            if (typeof obj[prop] === 'object') {
-                Object.freeze(obj[prop]);
-                recursiveFreeze(obj[prop]);
-            }
+    for (prop in obj) {
+        if (typeof obj[prop] === 'object') {
+            Object.freeze(obj[prop]);
+            recursiveFreeze(obj[prop]);
         }
-    }(Supercold));
-}
+    }
+}(Supercold));
 
 
 Supercold.GameStorageManager = GameStorageManager;
@@ -1761,6 +1777,20 @@ Sprite.prototype = Object.create(Phaser.Sprite.prototype);
 Sprite.prototype.constructor = Sprite;
 
 /**
+ * Moves the sprite forward, based on the given rotation and speed.
+ * The sprite must have a P2 body for this method to work correctly.
+ * (p2.body.moveForward does not work in our case, so I rolled my own.)
+ */
+Sprite.prototype.moveForward = function(rotation, speed) {
+    var velocity = this.body.velocity;
+
+    // Note that Phaser.Physics.Arcade.html#velocityFromRotation won't work,
+    // due to the Phaser.Physics.P2.InversePointProxy body.velocity instance.
+    velocity.x = speed * Math.cos(rotation);
+    velocity.y = speed * Math.sin(rotation);
+};
+
+/**
  * One of the game's live entities, i.e. the player or a bot.
  * @constructor
  * @abstract
@@ -1769,10 +1799,27 @@ function LiveSprite(game, x, y, key, _frame) {
     Sprite.call(this, game, x, y, key, _frame);
 
     this.name = 'LiveSprite';
-    // Time until the next bullet can be fired.
+    /**
+     * Time until the next bullet can be fired.
+     */
     this.remainingTime = 0;
-    // A Weapon to shoot with.
+    /**
+     * A Weapon to shoot with.
+     */
     this.weapon = null;
+
+    /**
+     * Tells if the sprite is currently dodging a bullet.
+     */
+    this._dodging = false;
+    /**
+     * The direction in which it is dodging.
+     */
+    this._direction = null;
+    /**
+     * How long it will dodge.
+     */
+    this._duration = 0;
 }
 
 LiveSprite.prototype = Object.create(Sprite.prototype);
@@ -1787,6 +1834,10 @@ LiveSprite.prototype.reset = function(x, y, _health) {
     Sprite.prototype.reset.call(this, x, y, _health);
     this.remainingTime = 0;
     this.weapon = null;
+
+    this._dodging = false;
+    this._direction = null;
+    this._duration = 0;
 };
 
 /**
@@ -1795,6 +1846,7 @@ LiveSprite.prototype.reset = function(x, y, _health) {
 LiveSprite.prototype.fire = function() {
     if (DEBUG) log('Bullet exists:', !!this.weapon.bullets.getFirstExists(!EXISTS));
     this.weapon.fire(this);
+    this.remainingTime = this.weapon.fireRate;
 };
 
 /**
@@ -1835,13 +1887,67 @@ Player.prototype.resize = function(worldScale) {
     this.scale.set(this.baseScale / worldScale.x, this.baseScale / worldScale.y);
 };
 
-Player.prototype.move = function() {
-
-};
-
+/**
+ * Rotates the player so as to point to the active pointer.
+ * @return {boolean} - true, if the rotation changed.
+ */
 Player.prototype.rotate = function() {
+    var playerRotated, newRotation;
 
+    // Even though we use P2 physics, this function should work just fine.
+    // Calculate the angle using World coords, because scaling messes it up.
+    newRotation = this.game.physics.arcade.angleToPointer(
+        this, undefined, USE_WORLD_COORDS);
+    playerRotated = (this.body.rotation !== newRotation);
+    this.body.rotation = newRotation;
+    return playerRotated;
 };
+
+/**
+ *
+ */
+/* Player.prototype.dodge = function() {
+    this._dodging = true;
+    this._direction = '';
+    this._duration = 0.25;      // secs
+}; */
+
+
+/**
+ * Regular movement for a bot.
+ */
+function moveForward(sprite, speed, player) {
+    sprite.moveForward(sprite.body.rotation, speed);
+}
+
+/**
+ * Movement for a bot that doesn't get too close to the player.
+ */
+function moveDistant(sprite, speed, player) {
+    if (sprite.game.physics.arcade.distanceBetween(sprite, player) <
+            moveDistant.DISTANCE) {
+        speed = 0;
+    }
+    sprite.moveForward(sprite.body.rotation, speed);
+}
+
+moveDistant.DISTANCE = 350;     // Space units
+
+/**
+ * Movement for a bot that always strafes once it gets close to the player.
+ * @constructor
+ */
+function moveStrafing(sprite, speed, player) {
+    if (sprite.game.physics.arcade.distanceBetween(sprite, player) <
+            moveStrafing.DISTANCE) {
+        sprite.moveForward(sprite.body.rotation - Math.PI/2, speed);
+    } else {
+        sprite.moveForward(sprite.body.rotation, speed);
+    }
+}
+
+moveStrafing.DISTANCE = 350;    // Space units
+
 
 /**
  * A bot.
@@ -1851,26 +1957,26 @@ function Bot(game, x, y, _key, _frame) {
     LiveSprite.call(this, game, x, y, game.cache.getBitmapData(CACHE.KEY.BOT));
 
     this.name = 'Bot ' + Bot.count++;
-    /**
-     * Tells if the bot is currently dodging a bullet.
-     */
-    this.dodging = false;
-    /**
-     * The direction in which it is dodging.
-     */
-    this.direction = null;
-    /**
-     * How long it will dodge.
-     */
-    this.duration = 0;
-
-    this.radius = -1;
 
     // Don't fire immediately!
     this.remainingTime = Supercold.initFireDelay;
+
+    this.radius = -1;
+
+    /**
+     * A function that encapsulates the movement logic of the bot.
+     */
+    this.move = moveForward;
 }
 
 Bot.count = 0;
+
+Bot.Direction = Object.freeze({
+    LEFT: 0,
+    RIGHT: 1
+});
+
+Bot.VIEW_ANGLE = Math.PI / 2.25;
 
 Bot.prototype = Object.create(LiveSprite.prototype);
 Bot.prototype.constructor = Bot;
@@ -1888,13 +1994,81 @@ Bot.prototype.kill = function() {
 Bot.prototype.reset = function(x, y, _health) {
     LiveSprite.prototype.reset.call(this, x, y, _health);
     this.remainingTime = Supercold.initFireDelay;
-    this.dodging = false;
-    this.direction = null;
-    this.duration = 0;
 };
 
-Bot.prototype.advance = function() {
+Bot.prototype._fire = function(level) {
+    var game = this.game;
 
+    // Wait sometimes before firing to make things a bit more unpredictable.
+    if (game.rnd.frac() <= 1/4) {
+        this.remainingTime = game.rnd.between(
+            0, Math.max(this.weapon.fireRate * (1 - level/100), 0));
+        return;
+    }
+    this.fire();
+};
+
+Bot.prototype._dodge = function(durationFix) {
+    var game = this.game;
+
+    this._dodging = true;
+    this._duration = 0.25 + durationFix;        // secs
+    this._direction = (game.rnd.between(0, 1)) ?
+        Bot.Direction.LEFT : Bot.Direction.RIGHT;
+};
+
+/**
+ * Advances the bot, based on its state and the state of the game.
+ * Basically, this is the AI for the bot.
+ */
+Bot.prototype.advance = function(elapsedTime, speed, level, player, playerFired) {
+    var game = this.game, angle, angleDiff, slowFactor;
+
+    this.remainingTime -= elapsedTime;
+
+    // Even though we use P2 physics, this function should work just fine.
+    this.body.rotation = game.physics.arcade.angleBetween(this, player);
+    // this.body.rotation = Math.atan2(player.y - this.y, player.x - this.x);
+
+    // Only try to shoot if the bot is somewhat close to the player
+    if (game.physics.arcade.distanceBetween(this, player) <
+            (NATIVE_WIDTH + NATIVE_HEIGHT) / 2) {
+        // and if it is ready to fire.
+        if (this.remainingTime <= 0) {
+            this._fire(level);
+        }
+    }
+
+    if (this._dodging) {
+        angle = ((this._direction === Bot.Direction.LEFT) ? 1 : -1) * Math.PI/2;
+        this.moveForward(this.body.rotation + angle, speed);
+        this._duration -= elapsedTime;
+        if (this._duration <= 0) {
+            this._dodging = false;
+        }
+        return;
+    }
+
+    this.move(this, speed, player);
+
+    // Dodge sometimes (chance: 1 / (60fps * 2sec * slowFactor)).
+    slowFactor = game.time.physicsElapsed / elapsedTime;
+    if (game.rnd.frac() <= 1 / (game.time.desiredFps * 2 * slowFactor)) {
+        this._dodge(0.004 * level);
+    }
+
+    // If the player fired and we are not already dodging, try to dodge.
+    if (playerFired) {
+        // Dodge only when the player is facing us, so it doesn't look stupid.
+        angleDiff = game.math.reverseAngle(player.body.rotation) -
+            game.math.normalizeAngle(this.body.rotation);
+        if (angleDiff < Bot.VIEW_ANGLE && angleDiff > -Bot.VIEW_ANGLE) {
+            // Dodge sometimes (chance in range [1/4,3/4]).
+            if (game.rnd.frac() <= 1/4 + Math.min(2/4, 2/4 * level/100)) {
+                this._dodge(0.005 * level);
+            }
+        }
+    }
 };
 
 
@@ -1906,6 +2080,7 @@ Bot.prototype.advance = function() {
  */
 function Weapon(bullets) {
     this.bullets = bullets;
+    this.fireRate = Supercold.baseFireRate;
 }
 
 /**
@@ -1918,7 +2093,7 @@ Weapon.prototype.fire = function(entity) {
 };
 
 /**
- * A pistol. Fires one bullet at a time.
+ * A pistol. Fires one bullet at a time. The simplest gun.
  * @param {BulletGroup} bullets - A group of bullets.
  * @constructor
  */
@@ -1939,30 +2114,210 @@ Pistol.prototype.fire = function(entity) {
 };
 
 /**
- * A shotgun. Fires many bullets at once.
+ * A . Fires an array of bullets. Accurate!
  * @param {BulletGroup} bullets - A group of bullets.
  * @constructor
  */
-function Shotgun(bullets) {
+function Burst(bullets) {
     Weapon.call(this, bullets);
+}
+
+Burst.prototype = Object.create(Weapon.prototype);
+Burst.prototype.constructor = Burst;
+
+Burst.OFFSET = 16;             // Space units
+
+/**
+ * Fires an array of bullets.
+ * @param {LiveSprite} entity - The entity that holds the weapon.
+ */
+Burst.prototype.fire = function(entity) {
+    var x = entity.x, y = entity.y, rotation = entity.body.rotation,
+        offsetX = Burst.OFFSET * Math.cos(rotation + Math.PI/2),
+        offsetY = Burst.OFFSET * Math.sin(rotation + Math.PI/2);
+
+    // Move the entity to adjust the position of the bullet to be fired.
+    // Upper
+    entity.x = x + offsetX;
+    entity.y = y + offsetY;
+    this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL).fire(entity, rotation);
+    // Lower
+    entity.x = x - offsetX;
+    entity.y = y - offsetY;
+    this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL).fire(entity, rotation);
+    // Middle
+    entity.x = x;
+    entity.y = y;
+    this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL).fire(entity, rotation);
+};
+
+var ANGLE_1DEG = 1 * Math.PI/180;       // 1 degree
+
+/**
+ * A blunderbuss. Fires many bullets at once, but inaccurately.
+ * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {BulletGroup} bullets - A group of bullets.
+ * @constructor
+ */
+function Blunderbuss(game, bullets) {
+    Weapon.call(this, bullets);
+    this.game = game;
+}
+
+Blunderbuss.prototype = Object.create(Weapon.prototype);
+Blunderbuss.prototype.constructor = Blunderbuss;
+
+Blunderbuss.ANGLE = 13 * ANGLE_1DEG;
+Blunderbuss.ANGLE_DIFF = 2 * ANGLE_1DEG;
+Blunderbuss.OFFSET = 5;
+
+/**
+ * Fires multiple bullets.
+ * @param {LiveSprite} entity - The entity that holds the weapon.
+ */
+Blunderbuss.prototype.fire = function(entity) {
+    var angle = Blunderbuss.ANGLE, diff = Blunderbuss.ANGLE_DIFF,
+        x = entity.x, y = entity.y, rotation = entity.body.rotation,
+        offsetX = Blunderbuss.OFFSET * Math.cos(rotation + Math.PI/2),
+        offsetY = Blunderbuss.OFFSET * Math.sin(rotation + Math.PI/2),
+        factor = -3/2, rnd = this.game.rnd, i;
+
+    // Move the entity to adjust the position of the bullet to be fired.
+    entity.x = x + factor*offsetX;
+    entity.y = y + factor*offsetY;
+    for (i = 1; i <= 4; ++i) {
+        this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL)
+            .fire(entity, rotation + factor*angle + rnd.realInRange(-diff, diff));
+        entity.x += offsetX;
+        entity.y += offsetY;
+        ++factor;
+    }
+    // Put it back in place.
+    entity.x = x;
+    entity.y = y;
+};
+
+/**
+ * A shotgun. Fires many bullets at once, but a somewhat inaccurately.
+ * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {BulletGroup} bullets - A group of bullets.
+ * @constructor
+ */
+function Shotgun(game, bullets) {
+    Weapon.call(this, bullets);
+    this.game = game;
 }
 
 Shotgun.prototype = Object.create(Weapon.prototype);
 Shotgun.prototype.constructor = Shotgun;
 
-Shotgun.angle = 20 * Math.PI / 180;     // 20 degrees
+Shotgun.ANGLE = 20 * ANGLE_1DEG;
+Shotgun.ANGLE_DIFF = 2 * ANGLE_1DEG;
 
 /**
  * Fires multiple bullets.
  * @param {LiveSprite} entity - The entity that holds the weapon.
  */
 Shotgun.prototype.fire = function(entity) {
+    var angle = Shotgun.ANGLE, diff = Shotgun.ANGLE_DIFF,
+        rotation = entity.body.rotation, rnd = this.game.rnd;
+
     this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL)
-        .fire(entity, entity.body.rotation - Shotgun.angle);
+        .fire(entity, rotation - angle + rnd.realInRange(-3*diff, diff));
     this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL)
-        .fire(entity, entity.body.rotation);
+        .fire(entity, rotation + rnd.realInRange(-diff, diff));
     this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL)
-        .fire(entity, entity.body.rotation + Shotgun.angle);
+        .fire(entity, rotation + angle + rnd.realInRange(-diff, 3*diff));
+};
+
+/**
+ * Double-barreled shotgun. Fires even more bullets at once more accurately.
+ * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {BulletGroup} bullets - A group of bullets.
+ * @constructor
+ */
+function DbShotgun(game, bullets) {
+    Weapon.call(this, bullets);
+    this.game = game;
+}
+
+DbShotgun.ANGLE = 10 * ANGLE_1DEG;
+DbShotgun.ANGLE_DIFF = 2 * ANGLE_1DEG;
+DbShotgun.OFFSET = 6;
+
+DbShotgun.prototype = Object.create(Weapon.prototype);
+DbShotgun.prototype.constructor = DbShotgun;
+
+/**
+ * Fires multiple bullets.
+ * @param {LiveSprite} entity - The entity that holds the weapon.
+ */
+DbShotgun.prototype.fire = function(entity) {
+    var angle = DbShotgun.ANGLE, diff = DbShotgun.ANGLE_DIFF,
+        x = entity.x, y = entity.y, rotation = entity.body.rotation,
+        offsetX = DbShotgun.OFFSET * Math.cos(rotation + Math.PI/2),
+        offsetY = DbShotgun.OFFSET * Math.sin(rotation + Math.PI/2),
+        rnd = this.game.rnd, i;
+
+    for (i = -2; i <= 2; ++i) {
+        // Move the entity to adjust the position of the bullet to be fired.
+        entity.x = x + i*offsetX;
+        entity.y = y + i*offsetY;
+        this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL)
+            .fire(entity, rotation + i*angle + rnd.realInRange(-diff, diff));
+    }
+    // Put it back in place.
+    entity.x = x;
+    entity.y = y;
+};
+
+/**
+ * A rifle. Fires bullets fast, but a little inaccurately.
+ * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {BulletGroup} bullets - A group of bullets.
+ * @param {number} fireFactor - A factor for the firing rate.
+ * @constructor
+ */
+function Rifle(game, bullets, fireFactor) {
+    Weapon.call(this, bullets);
+    this.game = game;
+    this.fireFactor = fireFactor;
+
+    this._bulletCount = Rifle.BULLET_COUNT;
+
+    this.fireRate = Rifle.FIRE_RATE * this.fireFactor;
+}
+
+Rifle.BULLET_COUNT = 10;
+Rifle.FIRE_RATE = Supercold.baseFireRate / 4;
+Rifle.OFFSET = 15;
+
+Rifle.prototype = Object.create(Weapon.prototype);
+Rifle.prototype.constructor = Rifle;
+
+/**
+ * Fires a bullet.
+ * @param {LiveSprite} entity - The entity that holds the weapon.
+ */
+Rifle.prototype.fire = function(entity) {
+    var offset = Rifle.OFFSET, rotation = entity.body.rotation, rnd = this.game.rnd,
+        offsetX = rnd.between(-offset, offset) * Math.cos(rotation + Math.PI/2),
+        offsetY = rnd.between(-offset, offset) * Math.sin(rotation + Math.PI/2);
+
+    // Move the entity to adjust the position of the bullet to be fired.
+    entity.x += offsetX;
+    entity.y += offsetY;
+    this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL).fire(entity, rotation);
+    // Put it back in place.
+    entity.x -= offsetX;
+    entity.y -= offsetY;
+    // Rifles have a variable fire rate.
+    if (--this._bulletCount > 0) {
+        this.fireRate = Rifle.FIRE_RATE * this.fireFactor * rnd.realInRange(0.9, 1.5);
+    } else {
+        this._bulletCount = Rifle.BULLET_COUNT;
+        this.fireRate = Rifle.FIRE_RATE * this.fireFactor * 4;
+    }
 };
 
 
@@ -2036,6 +2391,13 @@ Bullet.prototype.preUpdate = function() {
         return false;
     }
     return true;
+};
+
+/**
+ * Moves the bullet forward, based on the given speed.
+ */
+Bullet.prototype.move = function(speed) {
+    Sprite.prototype.moveForward.call(this, this.body.rotation, speed);
 };
 
 /**
@@ -2207,6 +2569,21 @@ BotGroup.prototype.create = function(x, y, _key, _frame) {
 };
 
 /**
+ * Advances all alive bots in this group.
+ */
+BotGroup.prototype.advance = function(
+        elapsedTime, speed, level, player, playerFired) {
+    var length = this.children.length, bot, i;
+
+    for (i = 0; i < length; ++i) {
+        bot = this.children[i];
+        if (bot.alive) {
+            bot.advance(elapsedTime, speed, level, player, playerFired);
+        }
+    }
+};
+
+/**
  * A group of 'Bullet's with enabled physics.
  * @param {Phaser.Game} game - A reference to the currently running Game.
  * @param {number} [scale=1] - The base scale for this group.
@@ -2250,6 +2627,20 @@ BulletGroup.prototype.create = function(_x, _y, _key, _frame) {
     this.customizer(bullet);
 
     return bullet;
+};
+
+/**
+ * Moves all alive bullets in this group forward, based on the given speed.
+ */
+BulletGroup.prototype.advance = function(speed) {
+    var length = this.children.length, bullet, i;
+
+    for (i = 0; i < length; ++i) {
+        bullet = this.children[i];
+        if (bullet.alive) {
+            bullet.move(speed);
+        }
+    }
 };
 
 /**
@@ -2655,7 +3046,12 @@ Supercold.Game = function(game) {
         bulletCount: null
     };
     this._weapons = {
-        bot: null
+        pistol: null,
+        burst: null,
+        blunderbuss: null,
+        shotgun: null,
+        dbshotgun: null,
+        rifle: null
     };
     this._counts = {
         // These will be set in init.
@@ -2683,7 +3079,6 @@ Supercold.Game = function(game) {
     this.level = -1;
 
     this._elapsedTime = 0;
-    this._fireRate = 0;
     this._hotswitching = false;
 };
 
@@ -2716,7 +3111,7 @@ Object.defineProperty(Supercold.Game.prototype, '_spriteScale', {
 Supercold.Game.prototype.init = function(options) {
     this.level = options.level;
     this._mutators = Supercold.storage.loadMutators();
-    this._counts.bots = 4 + Math.floor(this.level * 0.6);
+    this._counts.bots = 5 + Math.floor(this.level * 0.7);
     this._counts.bullets = (this._mutators.lmtdbull) ? this._counts.bots*3 : -1;
 };
 
@@ -3047,7 +3442,7 @@ Supercold.Game.prototype._botKillHandler = function(bot, bullet, _botS, _bulletS
 Supercold.Game.prototype._spawnBot = function(closer) {
     var player = this._sprites.player, colGroups = this._colGroups,
         radius = ((NATIVE_WIDTH + NATIVE_HEIGHT) / 2) / 2,
-        angle, x, y, bot;
+        angle, x, y, bot, chance;
 
     if (closer) {
         radius -= (2 * Supercold.player.radius) * 2;
@@ -3071,8 +3466,29 @@ Supercold.Game.prototype._spawnBot = function(closer) {
     --this._counts.bots;
 
     bot = this._groups.bots.getFirstDead(CREATE_IF_NULL, x, y);
-    // All bots share the same weapon.
-    bot.weapon = this._weapons.bot;
+    // All bots share the same weapons. Assign one randomly.
+    chance = this.rnd.frac() * Math.max(0.25, 1 - (this.level - 1)/250);
+    if (chance < 0.0025) {
+        bot.weapon = this._weapons.rifle;
+    } else if (chance < 0.025) {
+        bot.weapon = this._weapons.dbshotgun;
+    } else if (chance < 0.15) {
+        bot.weapon = this._weapons.shotgun;
+    } else if (chance < 0.25) {
+        bot.weapon = this._weapons.blunderbuss;
+    } else if (chance < 0.40) {
+        bot.weapon = this._weapons.burst;
+    } else {
+        bot.weapon = this._weapons.pistol;
+    }
+    chance = this.rnd.frac();
+    if (chance < 1/4) {
+        bot.move = moveStrafing;
+    } else if (chance < 5/8) {
+        bot.move = moveDistant;
+    } else {
+        bot.move = moveForward;
+    }
     // Fade into existence.
     bot.alpha = 0.1;
     this.add.tween(bot).to({
@@ -3126,6 +3542,7 @@ Supercold.Game.prototype.quit = function quit() {
 
 Supercold.Game.prototype.create = function() {
     var radius = Supercold.player.radius * this._spriteScale,
+        guns = Supercold.storage.loadGuns(),
         player, boundsColGroup;
 
     if (DEBUG) log('Creating Game state: Level ' + this.level + '...');
@@ -3151,7 +3568,15 @@ Supercold.Game.prototype.create = function() {
     this._bulletTrailPainter = new BulletTrailPainter(this.game);
     // Create the bullet groups first, so that they are rendered under the bots.
     this._addBulletGroups();
-    this._weapons.bot = new Pistol(this._groups.botBullets);
+    // Reusable weapons for the bots.
+    this._weapons.pistol = new Pistol(this._groups.botBullets);
+    this._weapons.burst = new Burst(this._groups.botBullets);
+    this._weapons.blunderbuss = new Blunderbuss(this.game, this._groups.botBullets);
+    this._weapons.shotgun = new Shotgun(this.game, this._groups.botBullets);
+    this._weapons.dbshotgun = new DbShotgun(this.game, this._groups.botBullets);
+    this._weapons.rifle = new Rifle(
+        this.game, this._groups.botBullets,
+        (this._mutators.fastgun) ? Supercold.fastFireFactor : 1);
 
     this._addPlayerBounds(boundsColGroup);
 
@@ -3162,9 +3587,21 @@ Supercold.Game.prototype.create = function() {
             0, this.world.bounds.right - PADDING.width - radius),
         this.rnd.sign() * this.rnd.between(
             0, this.world.bounds.bottom - PADDING.height - radius));
-    player.weapon = (this._mutators.shotgun) ?
-        new Shotgun(this._groups.playerBullets) :
-        new Pistol(this._groups.playerBullets);
+    if (guns.rifle) {
+        player.weapon = new Rifle(
+            this.game, this._groups.playerBullets,
+            (this._mutators.fastgun) ? Supercold.fastFireFactor : 1);
+    } else if (guns.dbshotgun) {
+        player.weapon = new DbShotgun(this.game, this._groups.playerBullets);
+    } else if (guns.shotgun) {
+        player.weapon = new Shotgun(this.game, this._groups.playerBullets);
+    } else if (guns.blunderbuss) {
+        player.weapon = new Blunderbuss(this.game, this._groups.playerBullets);
+    } else if (guns.burst) {
+        player.weapon = new Burst(this._groups.playerBullets);
+    } else {
+        player.weapon = new Pistol(this._groups.playerBullets);
+    }
     player.body.setCollisionGroup(this._colGroups.player);
     // The player collides with the bounds, the bots and the bullets.
     player.body.collides([boundsColGroup, this._colGroups.bots]);
@@ -3218,8 +3655,6 @@ Supercold.Game.prototype.create = function() {
     this._next.botTime = this.rnd.realInRange(0.06, 0.12);
     this._next.hotSwitch = this._hotswitchTimeout;
     this._hotswitching = false;
-    this._fireRate =
-        (this._mutators.fastgun) ? Supercold.fastFireRate : Supercold.fireRate;
 
     // We need to handle the shaking of the bullet bar separately to avoid
     // shaking immediately after a bullet is fired and to allow the player
@@ -3239,33 +3674,14 @@ Supercold.Game.prototype.create = function() {
 };
 
 
-/***** AI *****/
-
-/**
- * p2.body.moveForward does not work in our case, so I rolled my own.
- */
-function moveForward(body, rotation, speed) {
-    // Note that Phaser.Physics.Arcade.html#velocityFromRotation won't work,
-    // due to the Phaser.Physics.P2.InversePointProxy body.velocity instance.
-    body.velocity.x = speed * Math.cos(rotation);
-    body.velocity.y = speed * Math.sin(rotation);
-}
-
-Supercold.Game.prototype._getSpeed = function(playerAlive, playerMoved, playerRotated, speeds) {
+Supercold.Game.prototype._getSpeed = function(
+        playerAlive, playerMoved, playerRotated, speeds) {
     if (!playerAlive) return speeds.slow;
     if (playerMoved) return speeds.normal;
     if (this._mutators.freezetime) return 0;
     if (this._mutators.fasttime) return speeds.slow;
     if (playerRotated) return speeds.slower;
     return speeds.slowest;
-};
-
-Supercold.Game.prototype._getBotSpeed = function(playerAlive, playerMoved, playerRotated) {
-    return this._getSpeed(playerAlive, playerMoved, playerRotated, Supercold.speeds.bot);
-};
-
-Supercold.Game.prototype._getBulletSpeed = function(playerAlive, playerMoved, playerRotated) {
-    return this._getSpeed(playerAlive, playerMoved, playerRotated, Supercold.speeds.bullet);
 };
 
 Supercold.Game.prototype._firePlayerBullet = function() {
@@ -3276,7 +3692,6 @@ Supercold.Game.prototype._firePlayerBullet = function() {
         return false;
     }
     player.fire();
-    player.remainingTime = this._fireRate;
     --this._counts.bullets;
     if (this._huds.bulletCount) {
         this._huds.bulletCount.text =
@@ -3285,89 +3700,6 @@ Supercold.Game.prototype._firePlayerBullet = function() {
     return true;
 };
 
-Supercold.Game.prototype._fireBotBullet = function(bot) {
-    // Not ready to fire yet.
-    if (bot.remainingTime > 0) {
-        return;
-    }
-    // Wait sometimes before firing to make things a bit more unpredictable.
-    if (this.rnd.frac() <= 1/4) {
-        bot.remainingTime = this.rnd.between(
-            0, Math.max(Supercold.fireRate * (1 - this.level/100), 0));
-        return;
-    }
-    bot.fire();
-    bot.remainingTime = Supercold.fireRate;
-};
-
-Supercold.Game.prototype._advanceBullet = function(bullet, speed) {
-    moveForward(bullet.body, bullet.body.rotation, speed);
-};
-
-Supercold.Game.prototype._advanceBot = function(
-        bot, speed, playerFired, elapsedTime) {
-    var player = this._sprites.player, range = Math.PI/2.25, direction, angleDiff;
-
-    bot.remainingTime -= elapsedTime;
-
-    // Even though we use P2 physics, this function should work just fine.
-    bot.body.rotation = this.physics.arcade.angleBetween(bot, player);
-    // bot.body.rotation = Math.atan2(player.y - bot.y, player.x - bot.x);
-
-    // Only shoot if the bot is somewhat close to the player.
-    if (this.physics.arcade.distanceBetween(bot, player) <
-            (NATIVE_WIDTH + NATIVE_HEIGHT) / 2) {
-        this._fireBotBullet(bot);
-    }
-
-    if (bot.dodging) {
-        direction = ((bot.direction === 'left') ? 1 : -1) * Math.PI/2;
-        moveForward(bot.body, bot.body.rotation + direction, speed);
-        bot.duration -= elapsedTime;
-        if (bot.duration <= 0) {
-            bot.dodging = false;
-        }
-        return;
-    }
-
-    // TODO: Consider more complicated movement patterns.
-    moveForward(bot.body, bot.body.rotation, speed);
-
-    // Dodge sometimes (chance: 1 / (60fps * 2sec * slowFactor)).
-    if (this.rnd.frac() <= 1 / (this.time.desiredFps * 2 *
-            this.time.physicsElapsed/elapsedTime)) {
-        bot.dodging = true;
-        bot.duration = 0.25 + 0.004*this.level;   // secs
-        bot.direction = (this.rnd.between(0, 1)) ? 'left' : 'right';
-    }
-
-    // If the player fired and we are not already dodging, try to dodge.
-    if (playerFired) {
-        // Dodge only when the player is facing us, so it doesn't look stupid.
-        angleDiff = this.math.reverseAngle(player.body.rotation) -
-            this.math.normalizeAngle(bot.body.rotation);
-        if (!(angleDiff < range && angleDiff > -range))
-            return;
-        // Dodge sometimes (chance in range [1/4,3/4]).
-        if (this.rnd.frac() <= 1/4 + Math.min(2/4, 2/4 * this.level/100)) {
-            bot.dodging = true;
-            bot.duration = 0.25 + 0.005*this.level;   // secs
-            bot.direction = (this.rnd.between(0, 1)) ? 'left' : 'right';
-        }
-    }
-};
-
-Supercold.Game.prototype._rotatePlayer = function() {
-    var player = this._sprites.player, playerRotated, newRotation;
-
-    // Even though we use P2 physics, this function should work just fine.
-    // Calculate the angle using World coords, because scaling messes it up.
-    newRotation = this.physics.arcade.angleToPointer(
-        player, undefined, USE_WORLD_COORDS);
-    playerRotated = (player.body.rotation !== newRotation);
-    player.body.rotation = newRotation;
-    return playerRotated;
-};
 
 Supercold.Game.prototype.update = function() {
     var player = this._sprites.player,
@@ -3403,7 +3735,7 @@ Supercold.Game.prototype.update = function() {
         horVec.x = 1;
     }
     playerMoved = (verVec.y !== 0 || horVec.x !== 0);
-    playerRotated = this._rotatePlayer() && !this._mutators.freelook;
+    playerRotated = player.rotate() && !this._mutators.freelook;
 
     if (player.alive) {
         // Process firing controls (check that we are not trying to hotswitch).
@@ -3413,14 +3745,16 @@ Supercold.Game.prototype.update = function() {
 
         if (playerMoved) {
             newDirection = this.physics.arcade.angleBetween(verVec, horVec);
-            moveForward(player.body, newDirection, Supercold.speeds.player);
+            player.moveForward(newDirection, Supercold.speeds.player);
         } else {
             player.body.setZeroVelocity();
         }
     }
 
-    bulletSpeed = this._getBulletSpeed(player.alive, playerMoved, playerRotated);
-    botSpeed = this._getBotSpeed(player.alive, playerMoved, playerRotated);
+    bulletSpeed = this._getSpeed(
+        player.alive, playerMoved, playerRotated, Supercold.speeds.bullet);
+    botSpeed = this._getSpeed(
+        player.alive, playerMoved, playerRotated, Supercold.speeds.bot);
 
     // When time slows down, distort the elapsed time proportionally.
     elapsedTime = this._elapsedTime = this.time.physicsElapsed *
@@ -3436,23 +3770,21 @@ Supercold.Game.prototype.update = function() {
         if (this._next.botTime <= 0) {
             this._spawnBot();
             this._next.botTime = this.rnd.realInRange(
-                Math.max(1.4 - 0.01*this.level, 0),
-                Math.max(2.8 - 0.02*this.level, 0));
+                Math.max(1.4 - 0.01*this.level, 0.25),
+                Math.max(2.8 - 0.02*this.level, 0.25));
         }
     }
 
     // Update bots.
-    this._groups.bots.forEachAlive(
-        this._advanceBot, this, botSpeed, playerFired, elapsedTime);
+    this._groups.bots.advance(
+        elapsedTime, botSpeed, this.level, player, playerFired);
     // Update bullets.
-    this._groups.playerBullets.forEachAlive(
-        this._advanceBullet, this, bulletSpeed);
-    this._groups.botBullets.forEachAlive(
-        this._advanceBullet, this, bulletSpeed);
+    this._groups.playerBullets.advance(bulletSpeed);
+    this._groups.botBullets.advance(bulletSpeed);
     // Update HUDs (except minimap).
     if (player.alive) {
         this._huds.bulletBar.update(
-            Math.min(1, 1 - player.remainingTime / this._fireRate));
+            Math.min(1, 1 - player.remainingTime / player.weapon.fireRate));
         this._huds.hotswitchBar.update(
             Math.min(1, 1 - this._next.hotSwitch/this._hotswitchTimeout));
     }
@@ -3554,35 +3886,65 @@ function loadLevelInfo() {
     document.getElementById('level').value = Supercold.storage.loadLevel();
 }
 
-function emptyClassName(selector) {
-    Array.prototype.forEach.call(document.querySelectorAll(selector), function(el) {
+/**
+ * Marks the checked property of the each input
+ * according to the properties of the given object.
+ */
+function checkInputs(inputs) {
+    var input, element;
+
+    for (input in inputs) {
+        if (inputs.hasOwnProperty(input)) {
+            element = document.getElementById(input);
+            // Guard against old properties from previous versions!
+            if (element) {
+                element.checked = inputs[input];
+            }
+        }
+    }
+}
+
+function unlock(level) {
+    Array.prototype.forEach.call(
+            document.querySelectorAll('.locked' + level), function(el) {
         el.className = '';
+    });
+    Array.prototype.forEach.call(
+            document.querySelectorAll('.disabled' + level), function(el) {
+        el.previousElementSibling.removeAttribute('disabled');
     });
 }
 
-function showUnlockedMutators() {
-    var unlockLevels = [10, 20, 30, 40, 50, 60, 80, 100, 120, 150], level, i;
+function showUnlocked(unlockLevels, what) {
+    var level = Supercold.storage.loadHighestLevel(), i;
 
-    level = Supercold.storage.loadHighestLevel();
     for (i = 0; i < unlockLevels.length; ++i) {
         if (unlockLevels[i] <= level) {
-            emptyClassName('.locked' + unlockLevels[i]);
+            unlock(unlockLevels[i]);
         } else {
             break;
         }
     }
     if (level >= unlockLevels[unlockLevels.length-1]) {
-        document.getElementById('mutator-hint').style.display = 'none';
+        document.getElementById(what + '-hint').style.display = 'none';
     } else {
-        document.getElementById('mutator-hint-level').textContent = unlockLevels[i];
+        document.getElementById(what + '-hint-level').textContent = unlockLevels[i];
     }
+}
+
+function showUnlockedMutators() {
+    showUnlocked([20, 30, 40, 50, 80, 90, 100, 120], 'mutator');
+}
+
+function showUnlockedGuns() {
+    showUnlocked([10, 20, 30, 50, 75], 'gun');
 }
 
 Supercold.play = function play(parent) {
     // Tell Phaser to cover the entire window and use the CANVAS renderer.
     // Note that WebGL has issues on some platforms, so we go for plain canvas!
     var game = new Phaser.Game('100', '100', Phaser.CANVAS, parent),
-        mutators, mutator;
+        mutators, guns, previous;
 
     warn('WebGL has performance issues on some platforms! Using canvas renderer...\n\n');
 
@@ -3607,7 +3969,6 @@ Supercold.play = function play(parent) {
             freelook: false,
             fasttime: false,
             fastgun: false,
-            shotgun: false,
             bighead: false,
             chibi: false,
             dodge: false,
@@ -3618,21 +3979,49 @@ Supercold.play = function play(parent) {
             godmode: false
         });
     }
-    for (mutator in mutators) {
-        if (mutators.hasOwnProperty(mutator)) {
-            document.getElementById(mutator).checked = mutators[mutator];
-        }
+    checkInputs(mutators);
+
+    // We handle gun storage the same way as mutator storage, even though they
+    // work differently in the game. It may help with changes in the future.
+    guns = Supercold.storage.loadGuns();
+    if (guns === null) {
+        // Default gun (pistol)
+        Supercold.storage.saveGuns({
+            pistol: true,
+            burst: false,
+            blunderbuss: false,
+            shotgun: false,
+            dbshotgun: false,
+            rifle: false
+        });
     }
+    checkInputs(guns);
+    previous = document.querySelector('#guns input:checked').id;
 
     showUnlockedMutators();
+    showUnlockedGuns();
 
     // Handle mutator modifications.
-    Array.prototype.forEach.call(document.querySelectorAll('#mutators input'), function(input) {
+    Array.prototype.forEach.call(
+            document.querySelectorAll('#mutators input'), function(input) {
         input.addEventListener('change', function(event) {
             var mutators = Supercold.storage.loadMutators();
 
             mutators[this.id] = this.checked;
             Supercold.storage.saveMutators(mutators);
+        }, false);
+    });
+    // Handle gun modifications.
+    Array.prototype.forEach.call(
+            document.querySelectorAll('#guns input'), function(input) {
+        input.addEventListener('change', function(event) {
+            var guns = Supercold.storage.loadGuns();
+
+            // Disable previously selected weapon.
+            guns[previous] = false;
+            guns[this.id] = this.checked;
+            Supercold.storage.saveGuns(guns);
+            previous = this.id;
         }, false);
     });
 
@@ -3641,6 +4030,7 @@ Supercold.play = function play(parent) {
         onMainMenuOpen: function() {
             loadLevelInfo();
             showUnlockedMutators();
+            showUnlockedGuns();
             showMenu();
         }
     };

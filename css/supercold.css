@@ -41,9 +41,9 @@ input[type='checkbox'] + label > span {
 
     display: inline-block;
     /* The text is not aligned exactly with the checkbox. */
-    vertical-align: -2px;
-    width: 16px;
-    height: 16px;
+    vertical-align: -3px;
+    width: 15px;
+    height: 15px;
     margin-right: 4px;
     color: rgb(245, 4, 3);
     text-shadow: -1px 1px 6px rgb(245, 4, 3),
@@ -67,6 +67,50 @@ input[type='checkbox'] + label:hover > span::before {
 }
 input[type='checkbox']:checked + label > span::before {
     opacity: 1;
+}
+
+/* Fancy radio buttons */
+input[type='radio'] {
+    display: none;
+}
+input[type='radio'] + label {
+    position: relative;
+    cursor: pointer;
+}
+input[type='radio'] + label > span {
+    -webkit-box-sizing: content-box;
+       -moz-box-sizing: content-box;
+            box-sizing: content-box;
+
+    display: inline-block;
+    /* The text is not aligned exactly with the radio button. */
+    vertical-align: -6px;
+    width: 15px;
+    height: 15px;
+    margin-right: 5px;
+    color: rgb(245, 4, 3);
+    text-shadow: -1px 1px 6px rgb(245, 4, 3),
+                 1px -1px 6px rgb(245, 4, 3);
+    background-color: #525252;
+    text-align: center;
+    cursor: pointer;
+
+    border: 4px solid #3a3a3a;
+    border-radius: 100%;
+}
+input[type='radio'] + label:hover > span {
+    background-color: rgba(245, 4, 3, 0.6);
+}
+input[type='radio']:checked + label > span {
+    background-color: rgba(245, 4, 3, 0.85);
+}
+/* Disabled radio buttons need something extra. */
+input[type='radio']:disabled + label, input[type='radio']:disabled  + label > span {
+    opacity: 0.6;
+    cursor: default;
+}
+input[type='radio']:disabled  + label:hover > span {
+    background-color: #525252;
 }
 
 /* http://stackoverflow.com/a/4407335/1751037 */
@@ -250,7 +294,7 @@ button:hover {
 }
 
 #mutator-pane {
-    font-size: 0.95em;
+    font-size: 0.9em;
 }
 #mutator-pane div {
     margin: 2px 0;
@@ -259,8 +303,12 @@ button:hover {
     display: inline-block;
     text-align: left;
 }
-.locked10, .locked20, .locked30, .locked40, .locked50, .locked60, .locked80,
-.locked100, .locked120, .locked150 {
+#guns > div {
+    display: inline-block;
+    padding: 0 2px;
+}
+.locked10, .locked20, .locked30, .locked40, .locked50, .locked60, .locked70,
+.locked75, .locked80, .locked90, .locked100, .locked120 {
     display: none;
 }
 

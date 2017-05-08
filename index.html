@@ -119,20 +119,8 @@
                                 </label>
                             </div>
                             <div>
-                                <input id="shotgun" type="checkbox">
-                                <label for="shotgun" class="locked60">
-                                    <span></span>shotgun - Fire many bullets at once.
-                                </label>
-                            </div>
-                            <div>
-                                <input id="superhotswitch" type="checkbox">
-                                <label for="superhotswitch" class="locked80">
-                                    <span></span>superhotswitch - Hotswitch recharges faster.
-                                </label>
-                            </div>
-                            <div>
                                 <input id="lmtdbull" type="checkbox">
-                                <label for="lmtdbull" class="locked30">
+                                <label for="lmtdbull" class="locked40">
                                     <span></span>lmtdbull - You have limited bullets.
                                 </label>
                             </div>
@@ -144,32 +132,81 @@
                             </div>
                             <div>
                                 <input id="chibi" type="checkbox">
-                                <label for="chibi" class="locked10">
+                                <label for="chibi" class="locked30">
                                     <span></span>chibi - Smaller bots.
                                 </label>
                             </div>
                             <div style="display:none">
                                 <input id="doge" type="checkbox">
-                                <label for="doge" class="locked40">
+                                <label for="doge" class="locked60">
                                     <span></span>doge - MEMES! VERY SUPER! SUCH HOT! WOW!
+                                </label>
+                            </div>
+                            <div>
+                                <input id="superhotswitch" type="checkbox">
+                                <label for="superhotswitch" class="locked80">
+                                    <span></span>superhotswitch - Hotswitch recharges faster.
                                 </label>
                             </div>
                             <div style="display:none">
                                 <input id="dodge" type="checkbox">
-                                <label for="dodge" class="locked100">
+                                <label for="dodge" class="locked90">
                                     <span></span>dodge - Press <strong>CTRL</strong> while moving to dodge.
                                 </label>
                             </div>
                             <div>
                                 <input id="freezetime" type="checkbox">
-                                <label for="freezetime" class="locked120">
+                                <label for="freezetime" class="locked100">
                                     <span></span>freezetime - Time stands perfectly still.
                                 </label>
                             </div>
                             <div>
                                 <input id="godmode" type="checkbox">
-                                <label for="godmode" class="locked150">
+                                <label for="godmode" class="locked120">
                                     <span></span>godmode - <strong>You are invincible!</strong>
+                                </label>
+                            </div>
+                        </div>
+                        <h3>Guns</h3>
+                        <div id="gun-hint">
+                            (Reach level <strong id="gun-hint-level"></strong> to unlock more)
+                        </div>
+                        <div id="guns">
+                            <div>
+                                <input id="pistol" type="radio" name="gun" value="pistol" checked>
+                                <label for="pistol">
+                                    <span></span>Pistol
+                                </label>
+                            </div>
+                            <div>
+                                <input id="burst" type="radio" name="gun" value="burst" disabled>
+                                <label for="burst" class="disabled10">
+                                    <span></span>Burst
+                                </label>
+                            </div>
+                            <div>
+                                <input id="blunderbuss" type="radio" name="gun" value="blunderbuss" disabled>
+                                <label for="blunderbuss" class="disabled20">
+                                    <span></span>Blunderbuss
+                                </label>
+                            </div>
+                            <br/>
+                            <div>
+                                <input id="shotgun" type="radio" name="gun" value="shotgun" disabled>
+                                <label for="shotgun" class="disabled30">
+                                    <span></span>Shotgun
+                                </label>
+                            </div>
+                            <div>
+                                <input id="dbshotgun" type="radio" name="gun" value="dbshotgun" disabled>
+                                <label for="dbshotgun" class="disabled50">
+                                    <span></span>Double-Barrel Shotgun
+                                </label>
+                            </div>
+                            <div>
+                                <input id="rifle" type="radio" name="gun" value="rifle" disabled>
+                                <label for="rifle" class="disabled75">
+                                    <span></span>Rifle
                                 </label>
                             </div>
                         </div>
@@ -218,7 +255,7 @@
                 Try out some of the several mutators.
             </div>
             <div class="tip">
-                Reach level <strong>150</strong> for a fun mutator!
+                Reach level <strong>120</strong> for a really fun mutator!
             </div>
             <div class="tip">
                 If you are playing with limited bullets and you run out,<br/>
