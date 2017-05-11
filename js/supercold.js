@@ -336,7 +336,7 @@ var NATIVE_WIDTH = 1366,
     FACTOR_SLOWER = 42,
     FACTOR_SLOWEST = 192,
 
-    PLAYER_SPEED = 300,
+    PLAYER_SPEED = 296,
     BOT_SPEED_NORMAL = PLAYER_SPEED,
     BULLET_SPEED_NORMAL = PLAYER_SPEED * 5;
 
@@ -1815,7 +1815,7 @@ function LiveSprite(game, x, y, key, _frame) {
     /**
      * The direction in which it is dodging.
      */
-    this._direction = null;
+    this._direction = 0;
     /**
      * How long it will dodge.
      */
@@ -1836,7 +1836,7 @@ LiveSprite.prototype.reset = function(x, y, _health) {
     this.weapon = null;
 
     this._dodging = false;
-    this._direction = null;
+    this._direction = 0;
     this._duration = 0;
 };
 
@@ -1906,9 +1906,9 @@ Player.prototype.rotate = function() {
 /**
  *
  */
-/* Player.prototype.dodge = function() {
+/* Player.prototype.dodge = function(direction) {
     this._dodging = true;
-    this._direction = '';
+    this._direction = 1;
     this._duration = 0.25;      // secs
 }; */
 
@@ -1916,16 +1916,15 @@ Player.prototype.rotate = function() {
 /**
  * Regular movement for a bot.
  */
-function moveForward(sprite, speed, player) {
+function moveForward(sprite, speed, _player, _distance, _direction) {
     sprite.moveForward(sprite.body.rotation, speed);
 }
 
 /**
  * Movement for a bot that doesn't get too close to the player.
  */
-function moveDistant(sprite, speed, player) {
-    if (sprite.game.physics.arcade.distanceBetween(sprite, player) <
-            moveDistant.DISTANCE) {
+function moveDistant(sprite, speed, player, distance, _direction) {
+    if (sprite.game.physics.arcade.distanceBetween(sprite, player) < distance) {
         speed = 0;
     }
     sprite.moveForward(sprite.body.rotation, speed);
@@ -1937,16 +1936,28 @@ moveDistant.DISTANCE = 350;     // Space units
  * Movement for a bot that always strafes once it gets close to the player.
  * @constructor
  */
-function moveStrafing(sprite, speed, player) {
-    if (sprite.game.physics.arcade.distanceBetween(sprite, player) <
-            moveStrafing.DISTANCE) {
-        sprite.moveForward(sprite.body.rotation - Math.PI/2, speed);
+function moveStrafing(sprite, speed, player, distance, direction) {
+    if (sprite.game.physics.arcade.distanceBetween(sprite, player) < distance) {
+        sprite.moveForward(sprite.body.rotation + direction*0.8, speed);
     } else {
         sprite.moveForward(sprite.body.rotation, speed);
     }
 }
 
 moveStrafing.DISTANCE = 350;    // Space units
+
+/**
+ * Movement for a bot that always strafes once it gets close to the player,
+ * but doesn't get too close.
+ * @constructor
+ */
+function moveStrafingDistant(sprite, speed, player, distance, direction) {
+    if (sprite.game.physics.arcade.distanceBetween(sprite, player) < distance) {
+        sprite.moveForward(sprite.body.rotation + direction, speed);
+    } else {
+        sprite.moveForward(sprite.body.rotation, speed);
+    }
+}
 
 
 /**
@@ -1967,14 +1978,17 @@ function Bot(game, x, y, _key, _frame) {
      * A function that encapsulates the movement logic of the bot.
      */
     this.move = moveForward;
+    /**
+     * A parameter for the movement logic of the bot.
+     */
+    this.distance = 0;
+    /**
+     * A parameter for the movement logic of the bot.
+     */
+    this.direction = 0;
 }
 
 Bot.count = 0;
-
-Bot.Direction = Object.freeze({
-    LEFT: 0,
-    RIGHT: 1
-});
 
 Bot.VIEW_ANGLE = Math.PI / 2.25;
 
@@ -2013,8 +2027,7 @@ Bot.prototype._dodge = function(durationFix) {
 
     this._dodging = true;
     this._duration = 0.25 + durationFix;        // secs
-    this._direction = (game.rnd.between(0, 1)) ?
-        Bot.Direction.LEFT : Bot.Direction.RIGHT;
+    this._direction = ((game.rnd.between(0, 1)) ? 1 : -1) * Math.PI/2;
 };
 
 /**
@@ -2022,7 +2035,7 @@ Bot.prototype._dodge = function(durationFix) {
  * Basically, this is the AI for the bot.
  */
 Bot.prototype.advance = function(elapsedTime, speed, level, player, playerFired) {
-    var game = this.game, angle, angleDiff, slowFactor;
+    var game = this.game, angleDiff, slowFactor;
 
     this.remainingTime -= elapsedTime;
 
@@ -2040,8 +2053,7 @@ Bot.prototype.advance = function(elapsedTime, speed, level, player, playerFired)
     }
 
     if (this._dodging) {
-        angle = ((this._direction === Bot.Direction.LEFT) ? 1 : -1) * Math.PI/2;
-        this.moveForward(this.body.rotation + angle, speed);
+        this.moveForward(this.body.rotation + this._direction, speed);
         this._duration -= elapsedTime;
         if (this._duration <= 0) {
             this._dodging = false;
@@ -2049,7 +2061,7 @@ Bot.prototype.advance = function(elapsedTime, speed, level, player, playerFired)
         return;
     }
 
-    this.move(this, speed, player);
+    this.move(this, speed, player, this.distance, this.direction);
 
     // Dodge sometimes (chance: 1 / (60fps * 2sec * slowFactor)).
     slowFactor = game.time.physicsElapsed / elapsedTime;
@@ -2075,12 +2087,13 @@ Bot.prototype.advance = function(elapsedTime, speed, level, player, playerFired)
 /**
  * A weapon. Abstract base class.
  * @param {BulletGroup} bullets - A group of bullets.
+ * @param {number} fireFactor - A factor for the firing rate.
  * @constructor
  * @abstract
  */
-function Weapon(bullets) {
+function Weapon(bullets, fireFactor) {
     this.bullets = bullets;
-    this.fireRate = Supercold.baseFireRate;
+    this.fireRate = Supercold.baseFireRate * fireFactor;
 }
 
 /**
@@ -2095,10 +2108,11 @@ Weapon.prototype.fire = function(entity) {
 /**
  * A pistol. Fires one bullet at a time. The simplest gun.
  * @param {BulletGroup} bullets - A group of bullets.
+ * @param {number} fireFactor - A factor for the firing rate.
  * @constructor
  */
-function Pistol(bullets) {
-    Weapon.call(this, bullets);
+function Pistol(bullets, fireFactor) {
+    Weapon.call(this, bullets, fireFactor);
 }
 
 Pistol.prototype = Object.create(Weapon.prototype);
@@ -2114,12 +2128,13 @@ Pistol.prototype.fire = function(entity) {
 };
 
 /**
- * A . Fires an array of bullets. Accurate!
+ * A gun that fires two bullets at once. Accurate!
  * @param {BulletGroup} bullets - A group of bullets.
+ * @param {number} fireFactor - A factor for the firing rate.
  * @constructor
  */
-function Burst(bullets) {
-    Weapon.call(this, bullets);
+function Burst(bullets, fireFactor) {
+    Weapon.call(this, bullets, fireFactor);
 }
 
 Burst.prototype = Object.create(Weapon.prototype);
@@ -2133,8 +2148,48 @@ Burst.OFFSET = 16;             // Space units
  */
 Burst.prototype.fire = function(entity) {
     var x = entity.x, y = entity.y, rotation = entity.body.rotation,
-        offsetX = Burst.OFFSET * Math.cos(rotation + Math.PI/2),
-        offsetY = Burst.OFFSET * Math.sin(rotation + Math.PI/2);
+        offsetX = Burst.OFFSET * Math.cos(rotation + Math.PI/2) / 2,
+        offsetY = Burst.OFFSET * Math.sin(rotation + Math.PI/2) / 2;
+
+    // Move the entity to adjust the position of the bullet to be fired.
+    // Upper
+    entity.x = x + offsetX;
+    entity.y = y + offsetY;
+    this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL).fire(entity, rotation);
+    // Lower
+    entity.x = x - offsetX;
+    entity.y = y - offsetY;
+    this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL).fire(entity, rotation);
+    // Put it back in place.
+    entity.x = x;
+    entity.y = y;
+};
+
+/**
+ * A gun that fires three bullets at once. Accurate!
+ * @param {BulletGroup} bullets - A group of bullets.
+ * @param {number} fireFactor - A factor for the firing rate.
+ * @constructor
+ */
+function Burst3(bullets, fireFactor) {
+    Weapon.call(this, bullets, fireFactor);
+
+    this.fireRate *= 1.111;
+}
+
+Burst3.prototype = Object.create(Weapon.prototype);
+Burst3.prototype.constructor = Burst3;
+
+Burst3.OFFSET = 16;
+
+/**
+ * Fires an array of bullets.
+ * @param {LiveSprite} entity - The entity that holds the weapon.
+ */
+Burst3.prototype.fire = function(entity) {
+    var x = entity.x, y = entity.y, rotation = entity.body.rotation,
+        offsetX = Burst3.OFFSET * Math.cos(rotation + Math.PI/2),
+        offsetY = Burst3.OFFSET * Math.sin(rotation + Math.PI/2);
 
     // Move the entity to adjust the position of the bullet to be fired.
     // Upper
@@ -2157,11 +2212,14 @@ var ANGLE_1DEG = 1 * Math.PI/180;       // 1 degree
  * A blunderbuss. Fires many bullets at once, but inaccurately.
  * @param {Phaser.Game} game - A reference to the currently running Game.
  * @param {BulletGroup} bullets - A group of bullets.
+ * @param {number} fireFactor - A factor for the firing rate.
  * @constructor
  */
-function Blunderbuss(game, bullets) {
-    Weapon.call(this, bullets);
+function Blunderbuss(game, bullets, fireFactor) {
+    Weapon.call(this, bullets, fireFactor);
     this.game = game;
+
+    this.fireRate *= 1.2;
 }
 
 Blunderbuss.prototype = Object.create(Weapon.prototype);
@@ -2201,11 +2259,14 @@ Blunderbuss.prototype.fire = function(entity) {
  * A shotgun. Fires many bullets at once, but a somewhat inaccurately.
  * @param {Phaser.Game} game - A reference to the currently running Game.
  * @param {BulletGroup} bullets - A group of bullets.
+ * @param {number} fireFactor - A factor for the firing rate.
  * @constructor
  */
-function Shotgun(game, bullets) {
-    Weapon.call(this, bullets);
+function Shotgun(game, bullets, fireFactor) {
+    Weapon.call(this, bullets, fireFactor);
     this.game = game;
+
+    this.fireRate *= 1.111;
 }
 
 Shotgun.prototype = Object.create(Weapon.prototype);
@@ -2234,10 +2295,11 @@ Shotgun.prototype.fire = function(entity) {
  * Double-barreled shotgun. Fires even more bullets at once more accurately.
  * @param {Phaser.Game} game - A reference to the currently running Game.
  * @param {BulletGroup} bullets - A group of bullets.
+ * @param {number} fireFactor - A factor for the firing rate.
  * @constructor
  */
-function DbShotgun(game, bullets) {
-    Weapon.call(this, bullets);
+function DbShotgun(game, bullets, fireFactor) {
+    Weapon.call(this, bullets, fireFactor);
     this.game = game;
 }
 
@@ -2279,7 +2341,7 @@ DbShotgun.prototype.fire = function(entity) {
  * @constructor
  */
 function Rifle(game, bullets, fireFactor) {
-    Weapon.call(this, bullets);
+    Weapon.call(this, bullets, 1);
     this.game = game;
     this.fireFactor = fireFactor;
 
@@ -2313,10 +2375,10 @@ Rifle.prototype.fire = function(entity) {
     entity.y -= offsetY;
     // Rifles have a variable fire rate.
     if (--this._bulletCount > 0) {
-        this.fireRate = Rifle.FIRE_RATE * this.fireFactor * rnd.realInRange(0.9, 1.5);
+        this.fireRate = Rifle.FIRE_RATE * this.fireFactor * rnd.realInRange(0.9, 1.4);
     } else {
         this._bulletCount = Rifle.BULLET_COUNT;
-        this.fireRate = Rifle.FIRE_RATE * this.fireFactor * 4;
+        this.fireRate = Rifle.FIRE_RATE * this.fireFactor * 3.5;
     }
 };
 
@@ -3048,6 +3110,7 @@ Supercold.Game = function(game) {
     this._weapons = {
         pistol: null,
         burst: null,
+        burst3: null,
         blunderbuss: null,
         shotgun: null,
         dbshotgun: null,
@@ -3477,15 +3540,27 @@ Supercold.Game.prototype._spawnBot = function(closer) {
     } else if (chance < 0.25) {
         bot.weapon = this._weapons.blunderbuss;
     } else if (chance < 0.40) {
+        bot.weapon = this._weapons.burst3;
+    } else if (chance < 0.60) {
         bot.weapon = this._weapons.burst;
     } else {
         bot.weapon = this._weapons.pistol;
     }
     chance = this.rnd.frac();
-    if (chance < 1/4) {
+    if (chance < 2/10) {
         bot.move = moveStrafing;
-    } else if (chance < 5/8) {
+        bot.distance = this.rnd.between(
+            moveStrafing.DISTANCE - 50, moveStrafing.DISTANCE + 50);
+        bot.direction = this.rnd.sign() * Math.PI/2;
+    } else if (chance < 4/10) {
+        bot.move = moveStrafingDistant;
+        bot.distance = this.rnd.between(
+            moveStrafing.DISTANCE - 50, moveStrafing.DISTANCE + 50);
+        bot.direction = this.rnd.sign() * Math.PI/2;
+    } else if (chance < 7/10) {
         bot.move = moveDistant;
+        bot.distance = this.rnd.between(
+            moveDistant.DISTANCE - 50, moveDistant.DISTANCE + 50);
     } else {
         bot.move = moveForward;
     }
@@ -3541,7 +3616,8 @@ Supercold.Game.prototype.quit = function quit() {
 
 
 Supercold.Game.prototype.create = function() {
-    var radius = Supercold.player.radius * this._spriteScale,
+    var fireFactor = (this._mutators.fastgun) ? Supercold.fastFireFactor : 1,
+        radius = Supercold.player.radius * this._spriteScale,
         guns = Supercold.storage.loadGuns(),
         player, boundsColGroup;
 
@@ -3569,14 +3645,17 @@ Supercold.Game.prototype.create = function() {
     // Create the bullet groups first, so that they are rendered under the bots.
     this._addBulletGroups();
     // Reusable weapons for the bots.
-    this._weapons.pistol = new Pistol(this._groups.botBullets);
-    this._weapons.burst = new Burst(this._groups.botBullets);
-    this._weapons.blunderbuss = new Blunderbuss(this.game, this._groups.botBullets);
-    this._weapons.shotgun = new Shotgun(this.game, this._groups.botBullets);
-    this._weapons.dbshotgun = new DbShotgun(this.game, this._groups.botBullets);
+    this._weapons.pistol = new Pistol(this._groups.botBullets, 1);
+    this._weapons.burst = new Burst(this._groups.botBullets, 1);
+    this._weapons.burst3 = new Burst3(this._groups.botBullets, 1);
+    this._weapons.blunderbuss = new Blunderbuss(
+        this.game, this._groups.botBullets, 1);
+    this._weapons.shotgun = new Shotgun(
+        this.game, this._groups.botBullets, 1);
+    this._weapons.dbshotgun = new DbShotgun(
+        this.game, this._groups.botBullets, 1);
     this._weapons.rifle = new Rifle(
-        this.game, this._groups.botBullets,
-        (this._mutators.fastgun) ? Supercold.fastFireFactor : 1);
+        this.game, this._groups.botBullets, 1);
 
     this._addPlayerBounds(boundsColGroup);
 
@@ -3589,18 +3668,22 @@ Supercold.Game.prototype.create = function() {
             0, this.world.bounds.bottom - PADDING.height - radius));
     if (guns.rifle) {
         player.weapon = new Rifle(
-            this.game, this._groups.playerBullets,
-            (this._mutators.fastgun) ? Supercold.fastFireFactor : 1);
+            this.game, this._groups.playerBullets, fireFactor);
     } else if (guns.dbshotgun) {
-        player.weapon = new DbShotgun(this.game, this._groups.playerBullets);
+        player.weapon = new DbShotgun(
+            this.game, this._groups.playerBullets, fireFactor);
     } else if (guns.shotgun) {
-        player.weapon = new Shotgun(this.game, this._groups.playerBullets);
+        player.weapon = new Shotgun(
+            this.game, this._groups.playerBullets, fireFactor);
     } else if (guns.blunderbuss) {
-        player.weapon = new Blunderbuss(this.game, this._groups.playerBullets);
+        player.weapon = new Blunderbuss(
+            this.game, this._groups.playerBullets, fireFactor);
+    } else if (guns.burst3) {
+        player.weapon = new Burst3(this._groups.playerBullets, fireFactor);
     } else if (guns.burst) {
-        player.weapon = new Burst(this._groups.playerBullets);
+        player.weapon = new Burst(this._groups.playerBullets, fireFactor);
     } else {
-        player.weapon = new Pistol(this._groups.playerBullets);
+        player.weapon = new Pistol(this._groups.playerBullets, fireFactor);
     }
     player.body.setCollisionGroup(this._colGroups.player);
     // The player collides with the bounds, the bots and the bullets.
@@ -3937,7 +4020,7 @@ function showUnlockedMutators() {
 }
 
 function showUnlockedGuns() {
-    showUnlocked([10, 20, 30, 50, 75], 'gun');
+    showUnlocked([10, 20, 30, 40, 50, 75], 'gun');
 }
 
 Supercold.play = function play(parent) {
@@ -3989,6 +4072,7 @@ Supercold.play = function play(parent) {
         Supercold.storage.saveGuns({
             pistol: true,
             burst: false,
+            burst3: false,
             blunderbuss: false,
             shotgun: false,
             dbshotgun: false,
