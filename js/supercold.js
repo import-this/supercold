@@ -3451,10 +3451,15 @@ Supercold.Game.prototype._lose = function(player, bullet, _playerS, _bulletS) {
     var duration = 1500;
 
     // The collision handler may be called more than once due to bullet shapes!
-    if (!player.sprite.alive) {
+    if (!bullet.sprite.alive) {
         return;
     }
     bullet.sprite.kill();
+    // If the player get a second chance to live, don't lose!
+    if (this._mutators.secondchance) {
+        this._mutators.secondchance = false;
+        return;
+    }
     // If we have already won or we are in godmode, don't lose!
     if (this.superhot || this._mutators.godmode) {
         return;
@@ -4073,7 +4078,7 @@ function showUnlocked(unlockLevels, what) {
 }
 
 function showUnlockedMutators() {
-    showUnlocked([20, 30, 40, 50, 70, 80, 100, 120], 'mutator');
+    showUnlocked([20, 30, 40, 50, 70, 80, 90, 100, 120], 'mutator');
 }
 
 function showUnlockedGuns() {
@@ -4111,10 +4116,11 @@ Supercold.play = function play(parent) {
             fastgun: false,
             bighead: false,
             chibi: false,
-            dodge: false,
-            superhotswitch: false,
-            lmtdbull: false,
             doge: false,
+            dodge: false,
+            lmtdbull: false,
+            superhotswitch: false,
+            secondchance: false,
             freezetime: false,
             godmode: false
         });
