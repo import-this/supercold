@@ -68,6 +68,14 @@ input[type='checkbox'] + label:hover > span::before {
 input[type='checkbox']:checked + label > span::before {
     opacity: 1;
 }
+/* Disabled checkboxes need something extra. */
+input[type='checkbox']:disabled + label, input[type='checkbox']:disabled + label > span {
+    opacity: 0.6;
+    cursor: default;
+}
+input[type='checkbox']:disabled + label:hover > span::before {
+    opacity: 0;
+}
 
 /* Fancy radio buttons */
 input[type='radio'] {
@@ -105,11 +113,11 @@ input[type='radio']:checked + label > span {
     background-color: rgba(245, 4, 3, 0.85);
 }
 /* Disabled radio buttons need something extra. */
-input[type='radio']:disabled + label, input[type='radio']:disabled  + label > span {
+input[type='radio']:disabled + label, input[type='radio']:disabled + label > span {
     opacity: 0.6;
     cursor: default;
 }
-input[type='radio']:disabled  + label:hover > span {
+input[type='radio']:disabled + label:hover > span {
     background-color: #525252;
 }
 

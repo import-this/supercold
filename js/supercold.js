@@ -3635,9 +3635,9 @@ Supercold.Game.prototype._spawnBot = function(closer) {
         bot.weapon = this._weapons.shotgun;
     } else if (chance < 0.25) {
         bot.weapon = this._weapons.blunderbuss;
-    } else if (chance < 0.40) {
+    } else if (chance < 0.45) {
         bot.weapon = this._weapons.burst3;
-    } else if (chance < 0.60) {
+    } else if (chance < 0.65) {
         bot.weapon = this._weapons.burst;
     } else {
         bot.weapon = this._weapons.pistol;
@@ -4053,6 +4053,7 @@ function unlock(level) {
     Array.prototype.forEach.call(
             document.querySelectorAll('.locked' + level), function(el) {
         el.className = '';
+        el.previousElementSibling.removeAttribute('disabled');
     });
     Array.prototype.forEach.call(
             document.querySelectorAll('.disabled' + level), function(el) {
