@@ -618,6 +618,7 @@ var Supercold = {
             'right': Phaser.KeyCode.D
         },
         fireKey: Phaser.KeyCode.SPACEBAR,
+        dodgeKey: Phaser.KeyCode.SHIFT,
         quitKey: Phaser.KeyCode.ESC,
         restartKey: Phaser.KeyCode.T
     },
@@ -1811,7 +1812,7 @@ function LiveSprite(game, x, y, key, _frame) {
     /**
      * Tells if the sprite is currently dodging a bullet.
      */
-    this._dodging = false;
+    this.dodging = false;
     /**
      * The direction in which it is dodging.
      */
@@ -1835,7 +1836,7 @@ LiveSprite.prototype.reset = function(x, y, _health) {
     this.remainingTime = 0;
     this.weapon = null;
 
-    this._dodging = false;
+    this.dodging = false;
     this._direction = 0;
     this._duration = 0;
 };
@@ -1859,6 +1860,7 @@ function Player(game, x, y, scale) {
     this.name = 'Player';
     this.baseScale = scale || 1;
     this.radius = Supercold.player.radius * this.baseScale;
+    this._dodgeRemainingTime = Player.DODGE_RELOAD_TIME;
 
     this.game.add.existing(this);
 
@@ -1869,6 +1871,8 @@ function Player(game, x, y, scale) {
     // Account for world scaling.
     this.resize(this.game.world.scale);
 }
+
+Player.DODGE_RELOAD_TIME = 0.075;
 
 Player.prototype = Object.create(LiveSprite.prototype);
 Player.prototype.constructor = Player;
@@ -1904,59 +1908,98 @@ Player.prototype.rotate = function() {
 };
 
 /**
- *
+ * Makes the player dodge in the direction specified.
+ * @param {number} direction - The direction in which it will dodge.
  */
-/* Player.prototype.dodge = function(direction) {
-    this._dodging = true;
-    this._direction = 1;
-    this._duration = 0.25;      // secs
-}; */
-
-
-/**
- * Regular movement for a bot.
- */
-function moveForward(sprite, speed, _player, _distance, _direction) {
-    sprite.moveForward(sprite.body.rotation, speed);
-}
-
-/**
- * Movement for a bot that doesn't get too close to the player.
- */
-function moveDistant(sprite, speed, player, distance, _direction) {
-    if (sprite.game.physics.arcade.distanceBetween(sprite, player) < distance) {
-        speed = 0;
+Player.prototype.dodge = function(direction) {
+    if (!this.dodging && this._dodgeRemainingTime <= 0) {
+        this.dodging = true;
+        this._duration = 0.075;     // secs
+        this._direction = direction;
     }
-    sprite.moveForward(sprite.body.rotation, speed);
-}
-
-moveDistant.DISTANCE = 350;     // Space units
+};
 
 /**
- * Movement for a bot that always strafes once it gets close to the player.
- * @constructor
+ * Advances the player, based on their state and the state of the game.
+ * NOTE: This doesn't check if the player is alive or not!
  */
-function moveStrafing(sprite, speed, player, distance, direction) {
-    if (sprite.game.physics.arcade.distanceBetween(sprite, player) < distance) {
-        sprite.moveForward(sprite.body.rotation + direction*0.8, speed);
+Player.prototype.advance = function(moved, direction, elapsedTime) {
+    this.remainingTime -= elapsedTime;
+    this._dodgeRemainingTime -= elapsedTime;
+
+    if (this.dodging) {
+        this.moveForward(this._direction, Supercold.speeds.dodge);
+        this._duration -= elapsedTime;
+        if (this._duration <= 0) {
+            this.dodging = false;
+            this._dodgeRemainingTime = Player.DODGE_RELOAD_TIME;
+        }
+        return;
+    }
+
+    if (moved) {
+        this.moveForward(direction, Supercold.speeds.player);
     } else {
-        sprite.moveForward(sprite.body.rotation, speed);
+        this.body.setZeroVelocity();
     }
-}
+};
 
-moveStrafing.DISTANCE = 350;    // Space units
 
 /**
- * Movement for a bot that always strafes once it gets close to the player,
- * but doesn't get too close.
- * @constructor
+ * Returns a function that produces the regular movement for the bot.
+ * @return {function} - The mover.
  */
-function moveStrafingDistant(sprite, speed, player, distance, direction) {
-    if (sprite.game.physics.arcade.distanceBetween(sprite, player) < distance) {
-        sprite.moveForward(sprite.body.rotation + direction, speed);
-    } else {
+function newForwardMover() {
+    return function moveForward(sprite, speed, _player) {
         sprite.moveForward(sprite.body.rotation, speed);
-    }
+    };
+}
+
+/**
+ * Returns a function that makes the bot not get too close to the player.
+ * @param {number} distance - The distance that the bot will keep.
+ * @return {function} - The mover.
+ */
+function newDistantMover(distance) {
+    return function moveDistant(sprite, speed, player) {
+        if (sprite.game.physics.arcade.distanceBetween(sprite, player) < distance) {
+            speed = 0;
+        }
+        sprite.moveForward(sprite.body.rotation, speed);
+    };
+}
+
+/**
+ * Returns a function that always strafes the bot once it gets close to the player.
+ * @param {number} distance - The distance that the bot will keep.
+ * @param {number} direction - The direction in which it will strafe.
+ * @return {function} - The mover.
+ */
+function newStrafingMover(distance, direction) {
+    return function moveStrafing(sprite, speed, player) {
+        if (sprite.game.physics.arcade.distanceBetween(sprite, player) < distance) {
+            sprite.moveForward(sprite.body.rotation + direction*0.8, speed);
+        } else {
+            sprite.moveForward(sprite.body.rotation, speed);
+        }
+    };
+}
+
+/**
+ * Returns a function that always strafes the bot once it gets close
+ * to the player, but also doesn't let it get too close to them.
+ * @param {number} distance - The distance that the bot will keep.
+ * @param {number} direction - The direction in which it will strafe.
+ * @return {function} - The mover.
+ */
+function newStrafingDistantMover(distance, direction) {
+    return function moveStrafingDistant(sprite, speed, player) {
+        if (sprite.game.physics.arcade.distanceBetween(sprite, player) < distance) {
+            sprite.moveForward(sprite.body.rotation + direction, speed);
+        } else {
+            sprite.moveForward(sprite.body.rotation, speed);
+        }
+    };
 }
 
 
@@ -1977,15 +2020,7 @@ function Bot(game, x, y, _key, _frame) {
     /**
      * A function that encapsulates the movement logic of the bot.
      */
-    this.move = moveForward;
-    /**
-     * A parameter for the movement logic of the bot.
-     */
-    this.distance = 0;
-    /**
-     * A parameter for the movement logic of the bot.
-     */
-    this.direction = 0;
+    this.move = newForwardMover();
 }
 
 Bot.count = 0;
@@ -2025,7 +2060,7 @@ Bot.prototype._fire = function(level) {
 Bot.prototype._dodge = function(durationFix) {
     var game = this.game;
 
-    this._dodging = true;
+    this.dodging = true;
     this._duration = 0.25 + durationFix;        // secs
     this._direction = ((game.rnd.between(0, 1)) ? 1 : -1) * Math.PI/2;
 };
@@ -2052,16 +2087,16 @@ Bot.prototype.advance = function(elapsedTime, speed, level, player, playerFired)
         }
     }
 
-    if (this._dodging) {
+    if (this.dodging) {
         this.moveForward(this.body.rotation + this._direction, speed);
         this._duration -= elapsedTime;
         if (this._duration <= 0) {
-            this._dodging = false;
+            this.dodging = false;
         }
         return;
     }
 
-    this.move(this, speed, player, this.distance, this.direction);
+    this.move(this, speed, player);
 
     // Dodge sometimes (chance: 1 / (60fps * 2sec * slowFactor)).
     slowFactor = game.time.physicsElapsed / elapsedTime;
@@ -3099,7 +3134,8 @@ Supercold.Game = function(game) {
     this._controls = {
         cursors: null,
         wasd: null,
-        fireKey: null
+        fireKey: null,
+        dodgeKey: null
     };
     this._huds = {                  // Heads-up displays.
         minimap: null,
@@ -3499,13 +3535,68 @@ Supercold.Game.prototype._botKillHandler = function(bot, bullet, _botS, _bulletS
 };
 
 /**
+ * Creates some reusable weapons for the bots.
+ */
+Supercold.Game.prototype._createBotWeapons = function() {
+    var bullets = this._groups.botBullets, weapons = this._weapons, weapon;
+
+    weapons.pistol = new Pistol(bullets, 1);
+    weapons.burst = new Burst(bullets, 1);
+    weapons.burst3 = new Burst3(bullets, 1);
+    weapons.blunderbuss = new Blunderbuss(this.game, bullets, 1);
+    weapons.shotgun = new Shotgun(this.game, bullets, 1);
+    weapons.dbshotgun = new DbShotgun(this.game, bullets, 1);
+    weapons.rifle = new Rifle(this.game, bullets, 1);
+
+    if (DEBUG) {
+        // Make sure we created all the weapons.
+        for (weapon in weapons) {
+            if (weapons.hasOwnProperty(weapon)) {
+                assert(weapon !== undefined);
+            }
+        }
+    }
+};
+
+/**
+ * @return {Weapon} - A weapon for the player.
+ */
+Supercold.Game.prototype._createPlayerWeapon = function() {
+    var fireFactor = (this._mutators.fastgun) ? Supercold.fastFireFactor : 1,
+        bullets = this._groups.playerBullets,
+        guns = Supercold.storage.loadGuns();
+
+    if (guns.rifle) {
+        return new Rifle(this.game, bullets, fireFactor);
+    } else if (guns.dbshotgun) {
+        return new DbShotgun(this.game, bullets, fireFactor);
+    } else if (guns.shotgun) {
+        return new Shotgun(this.game, bullets, fireFactor);
+    } else if (guns.blunderbuss) {
+        return new Blunderbuss(this.game, bullets, fireFactor);
+    } else if (guns.burst3) {
+        return new Burst3(bullets, fireFactor);
+    } else if (guns.burst) {
+        return new Burst(bullets, fireFactor);
+    } else if (guns.pistol) {
+        return new Pistol(bullets, fireFactor);
+    } else {
+        if (DEBUG) {
+            assert(false);
+        } else {
+            return new Pistol(bullets, fireFactor);
+        }
+    }
+};
+
+/**
  * Spawns the next bot.
  * @param {boolean} [closer=false] - If true, spawns the bot closer to the player.
  */
 Supercold.Game.prototype._spawnBot = function(closer) {
     var player = this._sprites.player, colGroups = this._colGroups,
         radius = ((NATIVE_WIDTH + NATIVE_HEIGHT) / 2) / 2,
-        angle, x, y, bot, chance;
+        distance = 350, angle, x, y, bot, chance;
 
     if (closer) {
         radius -= (2 * Supercold.player.radius) * 2;
@@ -3530,7 +3621,7 @@ Supercold.Game.prototype._spawnBot = function(closer) {
 
     bot = this._groups.bots.getFirstDead(CREATE_IF_NULL, x, y);
     // All bots share the same weapons. Assign one randomly.
-    chance = this.rnd.frac() * Math.max(0.25, 1 - (this.level - 1)/250);
+    chance = this.rnd.frac() * Math.max(0.25, 1 - (this.level - 1)/200);
     if (chance < 0.0025) {
         bot.weapon = this._weapons.rifle;
     } else if (chance < 0.025) {
@@ -3548,21 +3639,18 @@ Supercold.Game.prototype._spawnBot = function(closer) {
     }
     chance = this.rnd.frac();
     if (chance < 2/10) {
-        bot.move = moveStrafing;
-        bot.distance = this.rnd.between(
-            moveStrafing.DISTANCE - 50, moveStrafing.DISTANCE + 50);
-        bot.direction = this.rnd.sign() * Math.PI/2;
+        bot.move = newStrafingMover(
+            this.rnd.between(distance - 50, distance + 50),
+            this.rnd.sign() * Math.PI/2);
     } else if (chance < 4/10) {
-        bot.move = moveStrafingDistant;
-        bot.distance = this.rnd.between(
-            moveStrafing.DISTANCE - 50, moveStrafing.DISTANCE + 50);
-        bot.direction = this.rnd.sign() * Math.PI/2;
+        bot.move = newStrafingDistantMover(
+            this.rnd.between(distance - 50, distance + 50),
+            this.rnd.sign() * Math.PI/2);
     } else if (chance < 7/10) {
-        bot.move = moveDistant;
-        bot.distance = this.rnd.between(
-            moveDistant.DISTANCE - 50, moveDistant.DISTANCE + 50);
+        bot.move = newDistantMover(
+            this.rnd.between(distance - 50, distance + 50));
     } else {
-        bot.move = moveForward;
+        bot.move = newForwardMover();
     }
     // Fade into existence.
     bot.alpha = 0.1;
@@ -3616,9 +3704,7 @@ Supercold.Game.prototype.quit = function quit() {
 
 
 Supercold.Game.prototype.create = function() {
-    var fireFactor = (this._mutators.fastgun) ? Supercold.fastFireFactor : 1,
-        radius = Supercold.player.radius * this._spriteScale,
-        guns = Supercold.storage.loadGuns(),
+    var radius = Supercold.player.radius * this._spriteScale,
         player, boundsColGroup;
 
     if (DEBUG) log('Creating Game state: Level ' + this.level + '...');
@@ -3645,17 +3731,7 @@ Supercold.Game.prototype.create = function() {
     // Create the bullet groups first, so that they are rendered under the bots.
     this._addBulletGroups();
     // Reusable weapons for the bots.
-    this._weapons.pistol = new Pistol(this._groups.botBullets, 1);
-    this._weapons.burst = new Burst(this._groups.botBullets, 1);
-    this._weapons.burst3 = new Burst3(this._groups.botBullets, 1);
-    this._weapons.blunderbuss = new Blunderbuss(
-        this.game, this._groups.botBullets, 1);
-    this._weapons.shotgun = new Shotgun(
-        this.game, this._groups.botBullets, 1);
-    this._weapons.dbshotgun = new DbShotgun(
-        this.game, this._groups.botBullets, 1);
-    this._weapons.rifle = new Rifle(
-        this.game, this._groups.botBullets, 1);
+    this._createBotWeapons();
 
     this._addPlayerBounds(boundsColGroup);
 
@@ -3666,25 +3742,7 @@ Supercold.Game.prototype.create = function() {
             0, this.world.bounds.right - PADDING.width - radius),
         this.rnd.sign() * this.rnd.between(
             0, this.world.bounds.bottom - PADDING.height - radius));
-    if (guns.rifle) {
-        player.weapon = new Rifle(
-            this.game, this._groups.playerBullets, fireFactor);
-    } else if (guns.dbshotgun) {
-        player.weapon = new DbShotgun(
-            this.game, this._groups.playerBullets, fireFactor);
-    } else if (guns.shotgun) {
-        player.weapon = new Shotgun(
-            this.game, this._groups.playerBullets, fireFactor);
-    } else if (guns.blunderbuss) {
-        player.weapon = new Blunderbuss(
-            this.game, this._groups.playerBullets, fireFactor);
-    } else if (guns.burst3) {
-        player.weapon = new Burst3(this._groups.playerBullets, fireFactor);
-    } else if (guns.burst) {
-        player.weapon = new Burst(this._groups.playerBullets, fireFactor);
-    } else {
-        player.weapon = new Pistol(this._groups.playerBullets, fireFactor);
-    }
+    player.weapon = this._createPlayerWeapon();
     player.body.setCollisionGroup(this._colGroups.player);
     // The player collides with the bounds, the bots and the bullets.
     player.body.collides([boundsColGroup, this._colGroups.bots]);
@@ -3721,6 +3779,7 @@ Supercold.Game.prototype.create = function() {
     this._controls.cursors = this.input.keyboard.createCursorKeys();
     this._controls.wasd = this.input.keyboard.addKeys(Supercold.controls.WASD);
     this._controls.fireKey = this.input.keyboard.addKey(Supercold.controls.fireKey);
+    this._controls.dodgeKey = this.input.keyboard.addKey(Supercold.controls.dodgeKey);
     this.input.keyboard.addKey(Supercold.controls.quitKey)
         .onDown.addOnce(this.quit, this);
     this.input.keyboard.addKey(Supercold.controls.restartKey)
@@ -3789,6 +3848,7 @@ Supercold.Game.prototype.update = function() {
         wasd = this._controls.wasd,
         cursors = this._controls.cursors,
         fireKey = this._controls.fireKey,
+        dodgeKey = this._controls.dodgeKey,
         verVec = this._cached.verVec,
         horVec = this._cached.horVec,
         fireButton = this.input.activePointer.leftButton,
@@ -3817,22 +3877,8 @@ Supercold.Game.prototype.update = function() {
     } else if (wasd.right.isDown || cursors.right.isDown) {
         horVec.x = 1;
     }
-    playerMoved = (verVec.y !== 0 || horVec.x !== 0);
+    playerMoved = (verVec.y !== 0 || horVec.x !== 0) || player.dodging;
     playerRotated = player.rotate() && !this._mutators.freelook;
-
-    if (player.alive) {
-        // Process firing controls (check that we are not trying to hotswitch).
-        if ((fireButton.isDown && !fireButton.shiftKey) || fireKey.isDown) {
-            playerFired = this._firePlayerBullet();
-        }
-
-        if (playerMoved) {
-            newDirection = this.physics.arcade.angleBetween(verVec, horVec);
-            player.moveForward(newDirection, Supercold.speeds.player);
-        } else {
-            player.body.setZeroVelocity();
-        }
-    }
 
     bulletSpeed = this._getSpeed(
         player.alive, playerMoved, playerRotated, Supercold.speeds.bullet);
@@ -3842,7 +3888,18 @@ Supercold.Game.prototype.update = function() {
     // When time slows down, distort the elapsed time proportionally.
     elapsedTime = this._elapsedTime = this.time.physicsElapsed *
         (bulletSpeed / Supercold.speeds.bullet.normal);
-    player.remainingTime -= elapsedTime;
+
+    if (player.alive) {
+        // Process firing controls (check that we are not trying to hotswitch).
+        if ((fireButton.isDown && !fireButton.shiftKey) || fireKey.isDown) {
+            playerFired = this._firePlayerBullet();
+        }
+        newDirection = this.physics.arcade.angleBetween(verVec, horVec);
+        if (playerMoved && this._mutators.dodge && dodgeKey.isDown) {
+            player.dodge(newDirection);
+        }
+        player.advance(playerMoved, newDirection, elapsedTime);
+    }
 
     if (!this._hotswitching) {
         this._next.hotSwitch -= elapsedTime;
@@ -4016,7 +4073,7 @@ function showUnlocked(unlockLevels, what) {
 }
 
 function showUnlockedMutators() {
-    showUnlocked([20, 30, 40, 50, 80, 90, 100, 120], 'mutator');
+    showUnlocked([20, 30, 40, 50, 70, 80, 100, 120], 'mutator');
 }
 
 function showUnlockedGuns() {
