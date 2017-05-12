@@ -1757,6 +1757,8 @@ Supercold.Intro.prototype.resize = function(width, height) {
 
 /******************************* Game State *******************************/
 
+var ANGLE_1DEG = 1 * Math.PI/180;       // 1 degree
+
 /***** Sprites and Groups *****/
 
 /*
@@ -2045,11 +2047,23 @@ Bot.prototype.reset = function(x, y, _health) {
     this.remainingTime = Supercold.initFireDelay;
 };
 
+/**
+ * Fires the weapon that the entity holds.
+ */
+Bot.prototype.fire = function() {
+    var body = this.body, rotation = body.rotation, angle = 2 * ANGLE_1DEG;
+
+    // Introduce some randomness in the aim.
+    body.rotation = rotation + this.game.rnd.realInRange(-angle, angle);
+    LiveSprite.prototype.fire.call(this);
+    body.rotation = rotation;
+};
+
 Bot.prototype._fire = function(level) {
     var game = this.game;
 
     // Wait sometimes before firing to make things a bit more unpredictable.
-    if (game.rnd.frac() <= 1/4) {
+    if (game.rnd.frac() <= 1/5) {
         this.remainingTime = game.rnd.between(
             0, Math.max(this.weapon.fireRate * (1 - level/100), 0));
         return;
@@ -2098,9 +2112,9 @@ Bot.prototype.advance = function(elapsedTime, speed, level, player, playerFired)
 
     this.move(this, speed, player);
 
-    // Dodge sometimes (chance: 1 / (60fps * 2sec * slowFactor)).
+    // Dodge sometimes (chance: 1 / (60fps * x sec * slowFactor)).
     slowFactor = game.time.physicsElapsed / elapsedTime;
-    if (game.rnd.frac() <= 1 / (game.time.desiredFps * 2 * slowFactor)) {
+    if (game.rnd.frac() <= 1 / (game.time.desiredFps * 1.2 * slowFactor)) {
         this._dodge(0.004 * level);
     }
 
@@ -2240,8 +2254,6 @@ Burst3.prototype.fire = function(entity) {
     entity.y = y;
     this.bullets.getFirstExists(!EXISTS, CREATE_IF_NULL).fire(entity, rotation);
 };
-
-var ANGLE_1DEG = 1 * Math.PI/180;       // 1 degree
 
 /**
  * A blunderbuss. Fires many bullets at once, but inaccurately.
@@ -3210,7 +3222,24 @@ Object.defineProperty(Supercold.Game.prototype, '_spriteScale', {
 Supercold.Game.prototype.init = function(options) {
     this.level = options.level;
     this._mutators = Supercold.storage.loadMutators();
-    this._counts.bots = 5 + Math.floor(this.level * 0.7);
+    switch (this.level) {
+        // More bots for boss levels!
+        case 9:
+        case 19:
+        case 29:
+        case 39:
+        case 49:
+        case 74:
+            this._counts.bots = 5 + Math.floor(this.level * 1.2);
+            break;
+        default:
+            if (this.level % 10 === 0) {
+                this._counts.bots = 5 + this.level;
+            } else {
+                this._counts.bots = 5 + Math.floor(this.level * 0.7);
+            }
+            break;
+    }
     this._counts.bullets = (this._mutators.lmtdbull) ? this._counts.bots*3 : -1;
 };
 
@@ -3594,6 +3623,83 @@ Supercold.Game.prototype._createPlayerWeapon = function() {
     }
 };
 
+Supercold.Game.prototype._assignBotWeapon = function(bot) {
+    // All bots share the same weapons. Assign one randomly.
+    var chance = this.rnd.frac() * Math.max(0.25, 1 - (this.level - 1)/200);
+
+    switch (this.level) {
+        // Boss battle for the level before unlocking a weapon!
+        case 9:
+            bot.weapon = this._weapons.burst;
+            return;
+        case 19:
+            bot.weapon = this._weapons.blunderbuss;
+            return;
+        case 29:
+            bot.weapon = this._weapons.shotgun;
+            return;
+        case 39:
+            bot.weapon = this._weapons.burst3;
+            return;
+        case 49:
+            bot.weapon = this._weapons.dbshotgun;
+            return;
+        case 74:
+            bot.weapon = this._weapons.rifle;
+            return;
+        // Regular levels.
+        default:
+            if (chance < 0.005) {
+                bot.weapon = this._weapons.rifle;
+            } else if (chance < 0.05) {
+                bot.weapon = this._weapons.dbshotgun;
+            } else if (chance < 0.20) {
+                bot.weapon = this._weapons.shotgun;
+            } else if (chance < 0.25) {
+                bot.weapon = this._weapons.blunderbuss;
+            } else if (chance < 0.44) {
+                bot.weapon = this._weapons.burst3;
+            } else if (chance < 0.66) {
+                bot.weapon = this._weapons.burst;
+            } else {
+                bot.weapon = this._weapons.pistol;
+            }
+            return;
+    }
+};
+
+Supercold.Game.prototype._setBotMovement = function(bot) {
+    var distance = 350, chance = this.rnd.frac();
+
+    if (this.level >= 20) {
+        if (chance < 2/10) {
+            bot.move = newStrafingMover(
+                this.rnd.between(distance - 50, distance + 50),
+                this.rnd.sign() * Math.PI/2);
+        } else if (chance < 4/10) {
+            bot.move = newStrafingDistantMover(
+                this.rnd.between(distance - 50, distance + 50),
+                this.rnd.sign() * Math.PI/2);
+        } else if (chance < 7/10) {
+            bot.move = newDistantMover(
+                this.rnd.between(distance - 50, distance + 50));
+        } else {
+            bot.move = newForwardMover();
+        }
+    } else {
+        if (chance < 1/5) {
+            bot.move = newStrafingDistantMover(
+                this.rnd.between(distance - 0, distance + 100),
+                this.rnd.sign() * Math.PI/2);
+        } else if (chance < 3/5) {
+            bot.move = newDistantMover(
+                this.rnd.between(distance - 0, distance + 100));
+        } else {
+            bot.move = newForwardMover();
+        }
+    }
+};
+
 /**
  * Spawns the next bot.
  * @param {boolean} [closer=false] - If true, spawns the bot closer to the player.
@@ -3601,7 +3707,7 @@ Supercold.Game.prototype._createPlayerWeapon = function() {
 Supercold.Game.prototype._spawnBot = function(closer) {
     var player = this._sprites.player, colGroups = this._colGroups,
         radius = ((NATIVE_WIDTH + NATIVE_HEIGHT) / 2) / 2,
-        distance = 350, angle, x, y, bot, chance;
+        angle, x, y, bot;
 
     if (closer) {
         radius -= (2 * Supercold.player.radius) * 2;
@@ -3625,38 +3731,9 @@ Supercold.Game.prototype._spawnBot = function(closer) {
     --this._counts.bots;
 
     bot = this._groups.bots.getFirstDead(CREATE_IF_NULL, x, y);
-    // All bots share the same weapons. Assign one randomly.
-    chance = this.rnd.frac() * Math.max(0.25, 1 - (this.level - 1)/200);
-    if (chance < 0.0025) {
-        bot.weapon = this._weapons.rifle;
-    } else if (chance < 0.025) {
-        bot.weapon = this._weapons.dbshotgun;
-    } else if (chance < 0.15) {
-        bot.weapon = this._weapons.shotgun;
-    } else if (chance < 0.25) {
-        bot.weapon = this._weapons.blunderbuss;
-    } else if (chance < 0.45) {
-        bot.weapon = this._weapons.burst3;
-    } else if (chance < 0.65) {
-        bot.weapon = this._weapons.burst;
-    } else {
-        bot.weapon = this._weapons.pistol;
-    }
-    chance = this.rnd.frac();
-    if (chance < 2/10) {
-        bot.move = newStrafingMover(
-            this.rnd.between(distance - 50, distance + 50),
-            this.rnd.sign() * Math.PI/2);
-    } else if (chance < 4/10) {
-        bot.move = newStrafingDistantMover(
-            this.rnd.between(distance - 50, distance + 50),
-            this.rnd.sign() * Math.PI/2);
-    } else if (chance < 7/10) {
-        bot.move = newDistantMover(
-            this.rnd.between(distance - 50, distance + 50));
-    } else {
-        bot.move = newForwardMover();
-    }
+    this._assignBotWeapon(bot);
+    this._setBotMovement(bot);
+
     // Fade into existence.
     bot.alpha = 0.1;
     this.add.tween(bot).to({
@@ -3915,8 +3992,8 @@ Supercold.Game.prototype.update = function() {
         if (this._next.botTime <= 0) {
             this._spawnBot();
             this._next.botTime = this.rnd.realInRange(
-                Math.max(1.4 - 0.01*this.level, 0.25),
-                Math.max(2.8 - 0.02*this.level, 0.25));
+                Math.max(1.2 - 0.01*this.level, 0.25),
+                Math.max(2.4 - 0.02*this.level, 0.25));
         }
     }
 
@@ -4079,7 +4156,7 @@ function showUnlocked(unlockLevels, what) {
 }
 
 function showUnlockedMutators() {
-    showUnlocked([20, 30, 40, 50, 70, 80, 90, 100, 120], 'mutator');
+    showUnlocked([20, 30, 40, 50, 70, 80, 90, 100, 128], 'mutator');
 }
 
 function showUnlockedGuns() {

@@ -316,7 +316,7 @@ button:hover {
     padding: 0 2px;
 }
 .locked10, .locked20, .locked30, .locked40, .locked50, .locked60, .locked70,
-.locked75, .locked80, .locked90, .locked100, .locked120 {
+.locked75, .locked80, .locked90, .locked100, .locked120, .locked128 {
     display: none;
 }
 
