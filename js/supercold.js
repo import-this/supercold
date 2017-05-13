@@ -279,6 +279,7 @@ if (DEBUG) {
 var CLEAR_WORLD = true,
     CLEAR_CACHE = true,
     ADD_TO_CACHE = true,
+    ADD_TO_STAGE = true,
     AUTOSTART = true,
     EXISTS = true,
     CREATE_IF_NULL = true,
@@ -2872,6 +2873,7 @@ BulletTrailPainter.prototype.updateTrails = function(elapsedTime) {
 /**
  * Abstract base class for heads-up displays.
  * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {Phaser.Group} group - The group in which to add the HUD.
  * @param {number} x - The x-coordinate of the top-left corner of the HUD.
  * @param {number} y - The y-coordinate of the top-left corner of the HUD.
  * @param {number} width - The width of the HUD.
@@ -2880,7 +2882,7 @@ BulletTrailPainter.prototype.updateTrails = function(elapsedTime) {
  * @constructor
  * @abstract
  */
-function HUD(game, x, y, width, height, key) {
+function HUD(game, group, x, y, width, height, key) {
     var scale = game.camera.scale,
         // Round, don't ceil!
         scaledWidth = Math.round(width * scale.x),
@@ -2892,12 +2894,10 @@ function HUD(game, x, y, width, height, key) {
     this.height = height;
 
     this.hud = game.make.bitmapData(scaledWidth, scaledHeight, key, true);
-    this.hudImage = this.hud.addToWorld(x, y);
+    this.hudImage = game.add.image(x, y, this.hud, null, group);
 
     this.hudImage.name = key;
-    this.hudImage.fixedToCamera = true;
-    // Account for camera scaling.
-    this.hudImage.scale.set(1 / scale.x, 1 / scale.y);
+    // HUDs will be added in an unscaled group, so no need to account for scaling.
 }
 
 /**
@@ -2915,9 +2915,6 @@ HUD.prototype.resize = function(x, y) {
     this.hud.resize(scaledWidth, scaledHeight);
     this.hudImage.x = x;
     this.hudImage.y = y;
-    this.hudImage.cameraOffset.set(x, y);
-    // Account for camera scaling.
-    this.hudImage.scale.set(1 / scale.x, 1 / scale.y);
 };
 
 HUD.prototype.update = function() {
@@ -2927,14 +2924,15 @@ HUD.prototype.update = function() {
 
 /**
  * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {Phaser.Group} group - The group in which to add the HUD.
  * @param {number} x - The x-coordinate of the top-left corner of the minimap.
  * @param {number} y - The y-coordinate of the top-left corner of the minimap.
  * @param {number} width - The width of the minimap.
  * @param {number} height - The height of the minimap.
  * @constructor
  */
-function Minimap(game, x, y, width, height) {
-    HUD.call(this, game, x, y, width, height, 'Minimap');
+function Minimap(game, group, x, y, width, height) {
+    HUD.call(this, game, group, x, y, width, height, 'Minimap');
 
     this._ratio = {
         x: Supercold.minimap.width / game.world.bounds.width,
@@ -3019,6 +3017,7 @@ Minimap.prototype.update = function(player, bots) {
 
 /**
  * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {Phaser.Group} group - The group in which to add the HUD.
  * @param {number} x - The x-coordinate of the top-left corner of the reload bar.
  * @param {number} y - The y-coordinate of the top-left corner of the reload bar.
  * @param {number} width - The width of the reload bar.
@@ -3026,8 +3025,8 @@ Minimap.prototype.update = function(player, bots) {
  * @param {string} key - A key for the Phaser chache.
  * @constructor
  */
-function ReloadBar(game, x, y, width, height, key, fillStyle) {
-    HUD.call(this, game, x, y, Supercold.bar.width, Supercold.bar.height, key);
+function ReloadBar(game, group, x, y, width, height, key, fillStyle) {
+    HUD.call(this, game, group, x, y, Supercold.bar.width, Supercold.bar.height, key);
 
     this._fillStyle = fillStyle;
     this._tween = null;
@@ -3058,7 +3057,7 @@ ReloadBar.prototype.resize = function(x, y) {
  * @param {number} progress - A value in the range [0, 1].
  */
 ReloadBar.prototype.update = function(progress) {
-    this.hudImage.scale.x = progress / this.game.camera.scale.x;
+    this.hudImage.scale.x = progress / 1;
     this.hudImage.alpha = (progress === 1) ? 1 : 0.75;
 };
 
@@ -3088,14 +3087,15 @@ ReloadBar.prototype.shake = function() {
 
 /**
  * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {Phaser.Group} group - The group in which to add the HUD.
  * @param {number} x - The x-coordinate of the top-left corner of the hotswitch bar.
  * @param {number} y - The y-coordinate of the top-left corner of the hotswitch bar.
  * @param {number} width - The width of the hotswitch bar.
  * @param {number} height - The height of the hotswitch bar.
  * @constructor
  */
-function HotswitchBar(game, x, y, width, height) {
-    ReloadBar.call(this, game, x, y, width, height, 'HotswitchBar',
+function HotswitchBar(game, group, x, y, width, height) {
+    ReloadBar.call(this, game, group, x, y, width, height, 'HotswitchBar',
                    Supercold.style.hotswitchBar.color);
 }
 
@@ -3104,14 +3104,15 @@ HotswitchBar.prototype.constructor = HotswitchBar;
 
 /**
  * @param {Phaser.Game} game - A reference to the currently running Game.
+ * @param {Phaser.Group} group - The group in which to add the HUD.
  * @param {number} x - The x-coordinate of the top-left corner of the bullet bar.
  * @param {number} y - The y-coordinate of the top-left corner of the bullet bar.
  * @param {number} width - The width of the bullet bar.
  * @param {number} height - The height of the bullet bar.
  * @constructor
  */
-function BulletBar(game, x, y, width, height) {
-    ReloadBar.call(this, game, x, y, width, height, 'BulletBar',
+function BulletBar(game, group, x, y, width, height) {
+    ReloadBar.call(this, game, group, x, y, width, height, 'BulletBar',
                    Supercold.style.bulletBar.color);
 }
 
@@ -3135,7 +3136,8 @@ Supercold.Game = function(game) {
         bounds: null,
         bots: null,
         playerBullets: null,
-        botBullets: null
+        botBullets: null,
+        ui: null
     };
     this._colGroups = {             // Collision groups
         player: null,
@@ -3444,35 +3446,21 @@ Supercold.Game.prototype._positionHuds = function() {
     // NOTE: Do not set anchor.x to 1, because this makes reload bars
     // reload right to left! Let's handle anchoring ourselves instead.
 
-    // Reset scale to compute correct sizes and offsets.
-    // TODO: Find a clean way to do the positioning!
-    hud.scale.set(1);
     hud.right = camera.width - Math.round(Supercold.minimap.x * scale.x);
     hud.bottom = camera.height - Math.round(Supercold.minimap.y * scale.y);
-    hud.scale.set(1 / scale.x, 1 / scale.y);
-    hud.cameraOffset.set(hud.x, hud.y);
 
     // At least 2 units on the y-axis so that bars do not touch on small screens!
     refHud = hud;
     hud = this._huds.hotswitchBar.hudImage;
-    hud.scale.set(1);
-    hud.alignTo(refHud, Phaser.TOP_LEFT, 0, 2 * scale.y);
-    hud.scale.set(1 / scale.x, 1 / scale.y);
-    hud.cameraOffset.set(hud.x, hud.y);
+    hud.alignTo(refHud, Phaser.TOP_LEFT, 0, Math.round(2 * scale.y));
     refHud = hud;
     hud = this._huds.bulletBar.hudImage;
-    hud.scale.set(1);
-    hud.alignTo(refHud, Phaser.TOP_LEFT, 0, 2 * scale.y);
-    hud.scale.set(1 / scale.x, 1 / scale.y);
-    hud.cameraOffset.set(hud.x, hud.y);
+    hud.alignTo(refHud, Phaser.TOP_LEFT, 0, Math.round(2 * scale.y));
 
     if (this._huds.bulletCount) {
         hud = this._huds.bulletCount;
-        hud.scale.set(1);
         hud.right = camera.width - Math.round(Supercold.bulletCount.x * scale.x);
         hud.top = Math.round(Supercold.bulletCount.y * scale.y);
-        hud.scale.set(1 / scale.x, 1 / scale.y);
-        hud.cameraOffset.set(hud.x, hud.y);
     }
 };
 
@@ -3840,19 +3828,22 @@ Supercold.Game.prototype.create = function() {
     this._scrollBackground();
 
     // Add HUDs.
+    this._groups.ui = this.add.group(undefined, 'UI group', ADD_TO_STAGE);
     this._huds.minimap = new Minimap(
-        this.game, 0, 0, Supercold.minimap.width, Supercold.minimap.height);
+        this.game, this._groups.ui, 0, 0,
+        Supercold.minimap.width, Supercold.minimap.height);
     this._huds.hotswitchBar = new HotswitchBar(
-        this.game, 0, 0, Supercold.bar.width, Supercold.bar.height);
+        this.game, this._groups.ui, 0, 0,
+        Supercold.bar.width, Supercold.bar.height);
     this._huds.bulletBar = new BulletBar(
-        this.game, 0, 0, Supercold.bar.width, Supercold.bar.height);
+        this.game, this._groups.ui, 0, 0,
+        Supercold.bar.width, Supercold.bar.height);
     if (this._mutators.lmtdbull) {
         this._huds.bulletCount = this.add.text(0, 0,
             Supercold.texts.BULLETS + this._counts.bullets,
-            Supercold.wordStyles.BULLETS);
+            Supercold.wordStyles.BULLETS, this._groups.ui);
         this._huds.bulletCount.fontSize =
             this.getHudFontSize(Supercold.wordStyles.BULLETS.fontSize);
-        this._huds.bulletCount.fixedToCamera = true;
     }
     // and fix their position on the screen.
     this._positionHuds();
@@ -4053,7 +4044,6 @@ Supercold.Game.prototype.resize = function(width, height) {
     if (this._huds.bulletCount) {
         this._huds.bulletCount.fontSize =
             this.getHudFontSize(Supercold.wordStyles.BULLETS.fontSize);
-        this.rescale(this._huds.bulletCount);
     }
     this._positionHuds();
 
@@ -4079,6 +4069,9 @@ Supercold.Game.prototype.shutdown = function() {
      * Note that BitmapData objects added to the cache will be destroyed for us.
      */
     if (DEBUG) log('Shutting down Game state...');
+
+    // The UI group is added directly to the stage and needs manual removal.
+    this.stage.removeChild(this._groups.ui);
 
     // Captured keys may mess with input on main menu.
     this.input.keyboard.clearCaptures();
