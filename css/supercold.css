@@ -95,7 +95,7 @@ input[type='radio'] + label > span {
     vertical-align: -6px;
     width: 15px;
     height: 15px;
-    margin-right: 5px;
+    margin-right: 3px;
     color: rgb(245, 4, 3);
     text-shadow: -1px 1px 6px rgb(245, 4, 3),
                  1px -1px 6px rgb(245, 4, 3);
@@ -209,7 +209,8 @@ button:hover {
          -o-transform: translate(-50%, -50%);
             transform: translate(-50%, -50%);
 
-    min-width: 704px;
+    /* Prevent wrapping on smaller screens! */
+    min-width: 655px;
     text-align: center;
     padding: 0.675em 1em;
     border-radius: 8px;
@@ -223,6 +224,12 @@ button:hover {
 
     -webkit-box-shadow: 0 0 6px 1px rgb(24, 24, 24);
             box-shadow: 0 0 6px 1px rgb(24, 24, 24);
+}
+@media (min-width: 768px) {
+    #center {
+        /* Prevent wrapping on smaller screens! */
+        min-width: 728px;
+    }
 }
 #panes {
     display: table;

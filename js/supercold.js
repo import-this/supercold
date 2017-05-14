@@ -300,6 +300,7 @@ var CLEAR_WORLD = true,
         KEY: {
             PLAYER: 'player',
             BOT: 'bot',
+            THROWABLE: 'throwable',
             BULLET: 'bullet',
             TRAIL: 'trail',
             BG: 'background',
@@ -375,6 +376,9 @@ var Supercold = {
      */
     player: {
         radius: 25
+    },
+    throwable: {
+        radius: 12
     },
     bullet: {
         width: 16,
@@ -481,6 +485,10 @@ var Supercold = {
                 color: 'rgb(255, 34, 33)',
                 strokeStyle: 'rgba(34, 34, 34, 0.95)',
                 lineWidth: 1.5
+            },
+            throwable: {
+                radius: 2,
+                color: 'rgb(30, 35, 38)'
             }
         },
         bulletBar: {
@@ -488,6 +496,9 @@ var Supercold = {
         },
         hotswitchBar: {
             color: 'rgba(250, 0, 0, 0.9)'
+        },
+        throwable: {
+            color: 'rgb(30, 35, 38)'
         },
         bullet: {
             color: 'rgb(30, 35, 38)',
@@ -699,29 +710,26 @@ function scaleToFit(scale, width, height, nativeWidth, nativeHeight) {
 }
 
 /**
- * Puts the given *fixed to camera* sprite in the center of the camera view.
+ * Puts the given sprite in the center of the camera view/screen.
+ * If the sprite is fixed to camera, it sets the camera offset, too.
  * @param {Phaser.Camera} camera - A reference to the game camera.
  * @param {Phaser.Sprite} sprite - The sprite to center.
  */
-function centerFixedToCamera(camera, sprite) {
-    if (DEBUG) assert(sprite.fixedToCamera);
+function centerToCamera(camera, sprite) {
     sprite.centerX = camera.view.halfWidth;
     sprite.centerY = camera.view.halfHeight;
-    sprite.cameraOffset.set(sprite.x, sprite.y);
+    if (sprite.fixedToCamera) {
+        sprite.cameraOffset.set(sprite.x, sprite.y);
+    }
     if (DEBUG) {
-        log('Centered fixed to camera', (sprite.name) ? sprite.name : 'sprite');
+        log('Centered to camera', (sprite.name) ? sprite.name : 'sprite');
     }
 }
 
 
 function _resize() {
     /*jshint validthis: true */
-    var camera = this.game.camera, scale = camera.scale;
-
-    // Account for camera scaling.
-    // Note: World and camera scaling is the same in Phaser.
-    this.scale.set(1 / scale.x, 1 / scale.y);
-    centerFixedToCamera(camera, this);
+    centerToCamera(this.game.camera, this);
 }
 
 /**
@@ -733,7 +741,6 @@ function CenteredImage(game, key) {
 
     this.name = 'CenteredImage';
     this.anchor.set(0.5);
-    this.fixedToCamera = true;
 
     // Center it.
     this.resize();
@@ -753,7 +760,6 @@ function CenteredText(game, text, style) {
 
     this.name = '"' + text + '"';
     this.anchor.set(0.5);
-    this.fixedToCamera = true;
 
     // Center it.
     this.resize();
@@ -796,9 +802,6 @@ ScaledCenteredText.prototype._scaleTextToFit = function() {
                Math.round(0.9 * this.game.height),
                this.texture.width,
                Math.round(this.texture.height / 1.4));
-    // Undo the world/camera scaling that will be applied by Phaser.
-    // Note: World and camera scaling values are the same in Phaser.
-    Phaser.Point.divide(this.scale, this.game.camera.scale, this.scale);
 };
 
 ScaledCenteredText.prototype.resize = function() {
@@ -813,7 +816,7 @@ ScaledCenteredText.prototype.resize = function() {
             style.shadowOffsetX * scale.x, style.shadowOffsetY * scale.y,
             style.shadowColor, style.shadowBlur * scale.x);
     this._scaleTextToFit();
-    centerFixedToCamera(this.game.camera, this);
+    centerToCamera(this.game.camera, this);
 };
 
 
@@ -838,6 +841,8 @@ function newOverlay(game, color) {
  *
  * @param {Array.<string>} text - The message (word/phrase) to display.
  * @param {object} [options] - A customization object.
+ * @param {Phaser.Group} [options.group=Game.World] -
+ *      The group in which to add the announcer's objects.
  * @param {number} [options.initDelay=0] -
  *      How long to wait before starting.
  * @param {number} [options.nextDelay=550] -
@@ -863,13 +868,15 @@ function newOverlay(game, color) {
  * @constructor
  */
 function Announcer(game, text, options) {
+    var group = options.group || game.world;
+
     this.options = Phaser.Utils.extend({}, Announcer.defaults, options);
     if (this.options.finalDelay === undefined) {
         this.options.finalDelay = this.options.nextDelay;
     }
 
     if (this.options.overlay) {
-        this._overlay = game.add.existing(
+        this._overlay = group.add(
             newOverlay(game, this.options.overlayColor));
         this._overlay.name = 'Announcer overlay';
     } else {
@@ -878,20 +885,33 @@ function Announcer(game, text, options) {
         this._overlay.name = 'Announcer null overlay';
     }
 
-    this._flash = game.add.existing(new CenteredImage(
+    this._flash = group.add(new CenteredImage(
         game, game.cache.getBitmapData(CACHE.KEY.FLASH)));
     this._flash.name = 'Announcer flash';
     this._flash.alpha = 0;
     this._flash.tint = this.options.flashTint;
 
-    this._textGroup = Announcer._addTextGroup(game, text);
+    this._textGroup = Announcer._addTextGroup(game, group, text);
+
+    this._inWorldGroup = (group === game.world);
 
     this._textTween = null;
     this._timer = null;
 
     // Handy references.
+    this.camera = game.camera;
     this.add = game.add;
     this.time = game.time;
+
+    // Objects in the game world are subject to camera positioning and scaling.
+    if (this._inWorldGroup) {
+        this._overlay.fixedToCamera = true;
+        this._flash.fixedToCamera = true;
+        this._textGroup.forEach(function(text) {
+            text.fixedToCamera = true;
+        });
+        this.resize();
+    }
 }
 
 Announcer.defaults = {
@@ -911,14 +931,28 @@ Announcer.defaults = {
 Announcer.scaleFactor = 1.06;
 
 Announcer.prototype.resize = function() {
+    var scale = this.camera.scale;
+
     // Do nothing if the announcer has finished.
     if (this._flash === null) return;
 
+    if (this._inWorldGroup) {
+        // Account for camera scaling.
+        // Note: World and camera scaling is the same in Phaser.
+        this._overlay.scale.set(1 / scale.x, 1 / scale.y);
+        this._flash.scale.set(1 / scale.x, 1 / scale.y);
+    }
     this._overlay.resize();
     this._flash.resize();
+
     this._textGroup.forEach(function resize(text) {
         text.resize();
-    });
+        if (this._inWorldGroup) {
+            // Undo the world/camera scaling that will be applied by Phaser.
+            // Note: World and camera scaling values are the same in Phaser.
+            Phaser.Point.divide(text.scale, scale, text.scale);
+        }
+    }, this);
     if (DEBUG) log('Resized announcer.');
 };
 
@@ -1005,12 +1039,11 @@ Announcer.prototype.announce = function() {
     return this;
 };
 
-Announcer._addTextGroup = function(game, words) {
+Announcer._addTextGroup = function(game, parent, words) {
     var scale = game.camera.scale,
         group, text, i, word, style;
 
-    group = game.add.group();
-    group.name = 'Text group: "' + words + '"';
+    group = game.add.group(parent, 'Text group: "' + words + '"');
     // Due to the way the 'fixedToCamera' property works, set it for each
     // text object individually (instead of setting it for the group).
     // https://phaser.io/docs/2.6.2/Phaser.Sprite.html#cameraOffset
@@ -1325,6 +1358,22 @@ Supercold._BaseState.prototype._makeBotBitmap = function() {
     this._makeLiveEntityBitmap(Supercold.style.bot, CACHE.KEY.BOT);
 };
 
+Supercold._BaseState.prototype._makeThrowableBitmap = function() {
+    var radius = Supercold.throwable.radius,
+        scale = this.world.scale,
+        width, bmd, ctx;
+
+    width = even(2*radius * scale.x);
+    bmd = this.getBitmapData(width, width, CACHE.KEY.THROWABLE);
+    ctx = bmd.ctx;
+
+    ctx.fillStyle = Supercold.style.throwable.color;
+    ctx.translate(bmd.width / 2, bmd.height / 2);
+    ctx.scale(scale.x, scale.y);
+    circle(ctx, 0, 0, radius);
+    ctx.fill();
+};
+
 Supercold._BaseState.prototype._makeBulletBitmap = function() {
     var scale = this.world.scale,
         bullet = Supercold.bullet,
@@ -1523,6 +1572,7 @@ Supercold._BaseState.prototype._makeOverlayBitmaps = function() {
 Supercold._BaseState.prototype.makeBitmaps = function() {
     this._makePlayerBitmap();
     this._makeBotBitmap();
+    this._makeThrowableBitmap();
     this._makeBulletBitmap();
     this._makeBulletTrailBitmap();
     this._makeBackgroundBitmap();
@@ -1692,7 +1742,7 @@ Supercold.MainMenu.prototype.create = function() {
 
     // Disable bounds checking for the camera, since it messes up centering.
     this.camera.bounds = null;
-    this.camera.focusOn(this.world);
+    // No need for the camera to focus on anything here!
 
     this._announcer = new Announcer(this.game, Supercold.texts.SUPERCOLD, {
         initDelay: 750,
@@ -2400,7 +2450,7 @@ function Rifle(game, bullets, fireFactor) {
 
 Rifle.BULLET_COUNT = 10;
 Rifle.FIRE_RATE = Supercold.baseFireRate / 4;
-Rifle.OFFSET = 15;
+Rifle.OFFSET = 16;
 
 Rifle.prototype = Object.create(Weapon.prototype);
 Rifle.prototype.constructor = Rifle;
@@ -2410,9 +2460,10 @@ Rifle.prototype.constructor = Rifle;
  * @param {LiveSprite} entity - The entity that holds the weapon.
  */
 Rifle.prototype.fire = function(entity) {
-    var offset = Rifle.OFFSET, rotation = entity.body.rotation, rnd = this.game.rnd,
-        offsetX = rnd.between(-offset, offset) * Math.cos(rotation + Math.PI/2),
-        offsetY = rnd.between(-offset, offset) * Math.sin(rotation + Math.PI/2);
+    var rnd = this.game.rnd, rotation = entity.body.rotation,
+        offset = rnd.between(-Rifle.OFFSET, Rifle.OFFSET),
+        offsetX = offset * Math.cos(rotation + Math.PI/2),
+        offsetY = offset * Math.sin(rotation + Math.PI/2);
 
     // Move the entity to adjust the position of the bullet to be fired.
     entity.x += offsetX;
@@ -2962,6 +3013,15 @@ Minimap.prototype.resize = function(x, y) {
     this.hud.ctx.lineWidth = Supercold.style.minimap.border.lineWidth;
 };
 
+Minimap.prototype._markThrowable = function(throwable) {
+    var ctx = this.hud.ctx;
+
+    // Just draw a circle.
+    circle(ctx, throwable.x * this._ratio.x, throwable.y * this._ratio.y,
+           Supercold.style.minimap.throwable.radius);
+    ctx.fill();
+};
+
 Minimap.prototype._markEntity = function(entity, radius) {
     var ctx = this.hud.ctx;
 
@@ -2978,7 +3038,13 @@ Minimap.prototype._markBot = function(bot) {
     this._markEntity(bot, Supercold.style.minimap.bot.radius);
 };
 
-Minimap.prototype.update = function(player, bots) {
+/**
+ *
+ * @param {Phaser.Sprite} player - The player.
+ * @param {Phaser.Group} bots - The bots.
+ * @param {Phaser.Group} throwables - A group of throwable objects.
+ */
+Minimap.prototype.update = function(player, bots, throwables) {
     var padX = Math.round(PADDING.width * this._ratio.x),
         padY = Math.round(PADDING.height * this._ratio.y),
         ctx = this.hud.ctx, style;
@@ -2997,6 +3063,9 @@ Minimap.prototype.update = function(player, bots) {
 
         // The (0, 0) point of our world is in the center!
         ctx.translate(this.width / 2, this.height / 2);
+
+        ctx.fillStyle = Supercold.style.minimap.throwable.color;
+        //throwables.forEachAlive(this._markThrowable, this);
 
         style = Supercold.style.minimap.bot;
         ctx.fillStyle = style.color;
@@ -3137,13 +3206,15 @@ Supercold.Game = function(game) {
         bots: null,
         playerBullets: null,
         botBullets: null,
+        throwables: null,
         ui: null
     };
     this._colGroups = {             // Collision groups
         player: null,
         bots: null,
         playerBullets: null,
-        botBullets: null
+        botBullets: null,
+        throwables: null
     };
     this._controls = {
         cursors: null,
@@ -3472,7 +3543,11 @@ Supercold.Game.prototype._lose = function(player, bullet, _playerS, _bulletS) {
         return;
     }
     bullet.sprite.kill();
-    // If the player get a second chance to live, don't lose!
+    // More than one bullet may collide with the player at once!
+    if (!player.sprite.alive) {
+        return;
+    }
+    // If the player gets a second chance to live, don't lose!
     if (this._mutators.secondchance) {
         this._mutators.secondchance = false;
         return;
@@ -3482,7 +3557,7 @@ Supercold.Game.prototype._lose = function(player, bullet, _playerS, _bulletS) {
         return;
     }
 
-    this._overlay = this.add.existing(newOverlay(this.game));
+    this._overlay = this._groups.ui.add(newOverlay(this.game));
     this._overlay.name = 'lose screen overlay';
     this._overlay.alpha = 0;
     this.add.tween(this._overlay).to({
@@ -3513,6 +3588,7 @@ Supercold.Game.prototype._superhot = function() {
     Supercold.storage.saveLevel(newLevel);
     // Create the announcer here to avoid lag and desync with the sound fx.
     announcer = new Announcer(this.game, Supercold.texts.SUPERHOT, {
+        group: this._groups.ui,
         nextDelay: 650,
         finalDelay: 400,
         repeat: true,
@@ -3741,6 +3817,7 @@ Supercold.Game.prototype._announce = function() {
     if (this.level === 1) {
         // If the player just started playing, explain the game mechanics.
         this._announcer = new Announcer(this.game, Supercold.texts.MECHANICS, {
+            group: this._groups.ui,
             initDelay: 750,
             duration: 250,
             nextDelay: 250,
@@ -3751,6 +3828,7 @@ Supercold.Game.prototype._announce = function() {
         // Otherwise, simply tell in which level they are in.
         levelText = Supercold.texts.LEVEL + ' ' + this.level;
         this._announcer = new Announcer(this.game, [levelText], {
+            group: this._groups.ui,
             initDelay: 750,
             duration: 500,
             finalDelay: 250,
