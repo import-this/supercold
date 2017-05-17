@@ -338,7 +338,7 @@ var NATIVE_WIDTH = 1366,
     FACTOR_SLOWER = 42,
     FACTOR_SLOWEST = 192,
 
-    PLAYER_SPEED = 296,
+    PLAYER_SPEED = 300,
     BOT_SPEED_NORMAL = PLAYER_SPEED,
     BULLET_SPEED_NORMAL = PLAYER_SPEED * 5;
 
@@ -3303,13 +3303,13 @@ Supercold.Game.prototype.init = function(options) {
         case 39:
         case 49:
         case 74:
-            this._counts.bots = 5 + Math.floor(this.level * 1.2);
+            this._counts.bots = 6 + this.level;
             break;
         default:
             if (this.level % 10 === 0) {
-                this._counts.bots = 5 + this.level;
+                this._counts.bots = this.level;
             } else {
-                this._counts.bots = 5 + Math.floor(this.level * 0.7);
+                this._counts.bots = 5 + Math.floor(this.level * 0.666);
             }
             break;
     }
@@ -3689,7 +3689,7 @@ Supercold.Game.prototype._createPlayerWeapon = function() {
 
 Supercold.Game.prototype._assignBotWeapon = function(bot) {
     // All bots share the same weapons. Assign one randomly.
-    var chance = this.rnd.frac() * Math.max(0.25, 1 - (this.level - 1)/200);
+    var chance = this.rnd.frac() * Math.max(0.2, 1 - (this.level - 1)/100);
 
     switch (this.level) {
         // Boss battle for the level before unlocking a weapon!
@@ -3713,7 +3713,7 @@ Supercold.Game.prototype._assignBotWeapon = function(bot) {
             return;
         // Regular levels.
         default:
-            if (chance < 0.005) {
+            if (chance < 0.02) {
                 bot.weapon = this._weapons.rifle;
             } else if (chance < 0.05) {
                 bot.weapon = this._weapons.dbshotgun;
@@ -3721,7 +3721,7 @@ Supercold.Game.prototype._assignBotWeapon = function(bot) {
                 bot.weapon = this._weapons.shotgun;
             } else if (chance < 0.25) {
                 bot.weapon = this._weapons.blunderbuss;
-            } else if (chance < 0.44) {
+            } else if (chance < 0.42) {
                 bot.weapon = this._weapons.burst3;
             } else if (chance < 0.66) {
                 bot.weapon = this._weapons.burst;
@@ -3733,31 +3733,31 @@ Supercold.Game.prototype._assignBotWeapon = function(bot) {
 };
 
 Supercold.Game.prototype._setBotMovement = function(bot) {
-    var distance = 350, chance = this.rnd.frac();
+    var distance = 300, chance = this.rnd.frac();
 
     if (this.level >= 20) {
         if (chance < 2/10) {
             bot.move = newStrafingMover(
-                this.rnd.between(distance - 50, distance + 50),
+                this.rnd.between(distance, distance + 100),
                 this.rnd.sign() * Math.PI/2);
         } else if (chance < 4/10) {
             bot.move = newStrafingDistantMover(
-                this.rnd.between(distance - 50, distance + 50),
+                this.rnd.between(distance, distance + 100),
                 this.rnd.sign() * Math.PI/2);
         } else if (chance < 7/10) {
             bot.move = newDistantMover(
-                this.rnd.between(distance - 50, distance + 50));
+                this.rnd.between(distance, distance + 100));
         } else {
             bot.move = newForwardMover();
         }
     } else {
         if (chance < 1/5) {
             bot.move = newStrafingDistantMover(
-                this.rnd.between(distance - 0, distance + 100),
+                this.rnd.between(distance, distance + 150),
                 this.rnd.sign() * Math.PI/2);
         } else if (chance < 3/5) {
             bot.move = newDistantMover(
-                this.rnd.between(distance - 0, distance + 100));
+                this.rnd.between(distance, distance + 150));
         } else {
             bot.move = newForwardMover();
         }
@@ -3945,7 +3945,7 @@ Supercold.Game.prototype.create = function() {
     // Spawn the first bot immediately.
     this._spawnBot(true);
     // Decide when to spawn the 2nd bot. It will be spawned faster than the rest.
-    this._next.botTime = this.rnd.realInRange(0.06, 0.12);
+    this._next.botTime = this.rnd.realInRange(0.05, 0.10);
     this._next.hotSwitch = this._hotswitchTimeout;
     this._hotswitching = false;
 
@@ -4061,8 +4061,8 @@ Supercold.Game.prototype.update = function() {
         if (this._next.botTime <= 0) {
             this._spawnBot();
             this._next.botTime = this.rnd.realInRange(
-                Math.max(1.2 - 0.01*this.level, 0.25),
-                Math.max(2.4 - 0.02*this.level, 0.25));
+                Math.max(1.2 - 0.010*this.level, 0.5),
+                Math.max(1.8 - 0.015*this.level, 0.5));
         }
     }
 
